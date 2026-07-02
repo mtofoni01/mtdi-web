@@ -4,15 +4,16 @@ import { useAuth } from '../context/AuthContext'
 const AZUL = '#4F6EF7'
 
 const navItems = [
-  { to: '/cartera',    label: '📈 Mi cartera',       always: true },
-  { to: '/watchlist',  label: '👁️ Watchlist',         always: true },
-  { to: '/depositos',  label: '🏦 Depósitos',          always: true },
-  { to: '/saldo',      label: '💰 Mi saldo',           always: true },
-  { to: '/documentos', label: '📄 Documentos',         always: true },
-  { to: '/gastos',     label: '💸 Gastos',             always: true },
-  { to: '/usuarios',   label: '👥 Usuarios',           admin: true },
-  { to: '/comisiones', label: '💹 Comisiones',         admin: true },
-  { to: '/custodios',  label: '🏛️ Custodios',          admin: true },
+  { to: '/cartera',             label: '📈 Mi cartera',           always: true },
+  { to: '/watchlist',           label: '👁️ Watchlist',             always: true },
+  { to: '/curva-rendimientos',  label: '📉 Curva de Rendimientos', always: true },
+  { to: '/depositos',           label: '🏦 Depósitos',             always: true },
+  { to: '/saldo',               label: '💰 Mi saldo',              always: true },
+  { to: '/documentos',          label: '📄 Documentos',            always: true },
+  { to: '/gastos',              label: '💸 Gastos',                always: true },
+  { to: '/usuarios',            label: '👥 Usuarios',              admin: true },
+  { to: '/comisiones',          label: '💹 Comisiones',            admin: true },
+  { to: '/custodios',           label: '🏛️ Custodios',             admin: true },
 ]
 
 export default function Sidebar() {
