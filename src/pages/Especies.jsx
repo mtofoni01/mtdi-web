@@ -1,5 +1,5 @@
 // pages/Especies.jsx
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 
 const TIPOS_ESPECIE = [
@@ -122,20 +122,19 @@ export default function Especies() {
     }
   }
 
-
+  const toggleSeguimiento = async (ticker, valorActual) => {
     try {
       await authFetch(`/api/cartera/especies/${ticker}/seguimiento`, {
         method: 'PUT',
         body: JSON.stringify({ en_seguimiento: !valorActual }),
       })
-      // Actualizar localmente sin recargar toda la lista
       setEspecies(prev => prev.map(e =>
         e.ticker === ticker ? { ...e, en_seguimiento: !valorActual } : e
       ))
     } catch {}
   }
 
-
+  const filtradas = especies.filter(e =>
     !busqueda ||
     e.ticker.toLowerCase().includes(busqueda.toLowerCase()) ||
     (e.descripcion || '').toLowerCase().includes(busqueda.toLowerCase())
@@ -219,7 +218,7 @@ export default function Especies() {
         </div>
       </div>
 
-
+      {/* Buscador */}
       <input
         type="text"
         value={busqueda}
@@ -244,9 +243,9 @@ export default function Especies() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtradas.map((esp) => (
-                <>
+                <React.Fragment key={esp.ticker}>
                   {/* Fila normal */}
-                  <tr key={esp.ticker} className={`hover:bg-gray-50 ${editando === esp.ticker ? 'bg-indigo-50' : ''}`}>
+                  <tr className={`hover:bg-gray-50 ${editando === esp.ticker ? 'bg-indigo-50' : ''}`}>
                     <td className="px-4 py-3">
                       <span className="text-xs font-bold text-white px-2 py-1 rounded bg-indigo-500">
                         {esp.ticker}
@@ -296,10 +295,9 @@ export default function Especies() {
 
                   {/* Fila de edición inline */}
                   {editando === esp.ticker && (
-                    <tr key={`${esp.ticker}-edit`} className="bg-indigo-50">
+                    <tr className="bg-indigo-50">
                       <td colSpan={8} className="px-4 py-4">
                         <div className="flex flex-wrap gap-4 items-end">
-                          {/* Descripción */}
                           <div>
                             <label className="text-xs text-gray-500 block mb-1">Descripción</label>
                             <input
@@ -309,8 +307,6 @@ export default function Especies() {
                               className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:border-indigo-400 bg-white"
                             />
                           </div>
-
-                          {/* Tipo */}
                           <div>
                             <label className="text-xs text-gray-500 block mb-1">Tipo</label>
                             <select
@@ -323,8 +319,6 @@ export default function Especies() {
                               ))}
                             </select>
                           </div>
-
-                          {/* Moneda */}
                           <div>
                             <label className="text-xs text-gray-500 block mb-1">Moneda</label>
                             <select
@@ -337,8 +331,6 @@ export default function Especies() {
                               ))}
                             </select>
                           </div>
-
-                          {/* Fecha vto */}
                           <div>
                             <label className="text-xs text-gray-500 block mb-1">Vencimiento</label>
                             <input
@@ -348,8 +340,6 @@ export default function Especies() {
                               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 bg-white"
                             />
                           </div>
-
-                          {/* Botones */}
                           <div className="flex gap-2">
                             <button
                               onClick={() => guardar(esp.ticker)}
@@ -370,7 +360,7 @@ export default function Especies() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
