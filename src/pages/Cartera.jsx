@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import EspecieDetalle from '../components/EspecieDetalle'
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 function fmt(n, dec = 0) {
   return parseFloat(n || 0).toLocaleString('es-AR', { maximumFractionDigits: dec })
@@ -25,26 +26,118 @@ const colorTipo = (tipo) => {
   return map[tipo] || '#555'
 }
 
+// ── Colores para tortas ───────────────────────────────────────────
+const COLORES_TIPO = {
+  bono_usd:       '#1a6eb5', bono_ars:       '#e67e22', bono_cer:  '#27ae60',
+  bono_dv:        '#8e44ad', letra_ars:      '#e74c3c', letra_usd: '#2980b9',
+  on:             '#16a085', fci_mm:         '#6c3fc5', fci_rf:    '#5a32a8',
+  fci_rv:         '#7d1fa8', fci_mix:        '#8a3fc5', accion:    '#c5183c',
+  cedear:         '#a8142e', plazo_fijo_ars: '#b5700a', plazo_fijo_usd: '#8a5200',
+}
+const COLORES_MONEDA  = { ARS: '#e67e22', USD: '#1a6eb5' }
+const COLORES_CUSTODIO = ['#4F6EF7','#27ae60','#e67e22','#8e44ad','#e74c3c','#16a085','#f39c12','#2980b9']
+
+const LABEL_TIPO = {
+  bono_usd: 'Bono USD', bono_ars: 'Bono ARS', bono_cer: 'Bono CER',
+  bono_dv: 'Dólar Linked', letra_ars: 'LECAP', letra_usd: 'LETE',
+  on: 'ON', fci_mm: 'FCI MM', fci_rf: 'FCI RF', fci_rv: 'FCI RV',
+  fci_mix: 'FCI Mix', accion: 'Acción', cedear: 'CEDEAR',
+  plazo_fijo_ars: 'PF ARS', plazo_fijo_usd: 'PF USD',
+}
+
+const fmtTooltip = (value) => `$${parseFloat(value || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`
+
+function TortaCard({ titulo, datos, colorKey, colorMap }) {
+  if (!datos || datos.length === 0) return null
+  const total = datos.reduce((s, d) => s + d.value, 0)
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4">
+      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{titulo}</p>
+      <ResponsiveContainer width="100%" height={220}>
+        <PieChart>
+          <Pie
+            data={datos}
+            cx="50%"
+            cy="50%"
+            innerRadius={55}
+            outerRadius={85}
+            paddingAngle={2}
+            dataKey="value"
+          >
+            {datos.map((entry, i) => (
+              <Cell
+                key={i}
+                fill={colorMap ? (colorMap[entry[colorKey]] || COLORES_CUSTODIO[i % COLORES_CUSTODIO.length]) : COLORES_CUSTODIO[i % COLORES_CUSTODIO.length]}
+              />
+            ))}
+          </Pie>
+          <Tooltip
+            formatter={(v, name) => [fmtTooltip(v), name]}
+            contentStyle={{ fontSize: 11 }}
+          />
+          <Legend
+            iconType="circle"
+            iconSize={8}
+            wrapperStyle={{ fontSize: 11 }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <p className="text-center text-xs text-gray-400 mt-1">Total: ${parseFloat(total).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</p>
+    </div>
+  )
+}
+
 // ── Componente de informes ─────────────────────────────────────────
 function Informes({ posiciones }) {
   const [custodioFiltro, setCustodioFiltro] = useState('Todos')
 
-  // Lista de custodios únicos
   const custodios = ['Todos', ...new Set(
     posiciones.map(p => p.custodio_nombre).filter(Boolean)
   )]
 
-  // Posiciones filtradas por custodio
   const items = custodioFiltro === 'Todos'
     ? posiciones
     : posiciones.filter(p => p.custodio_nombre === custodioFiltro)
 
-  // ── Total por moneda ──────────────────────────────────────────────
   const totalARS = items.reduce((s, p) => s + parseFloat(p.valuacion_ars || 0), 0)
-  const totalUSD = items.reduce((s, p) => s + parseFloat(p.valuacion_usd || 0), 0)
+  const totalARSTodos = posiciones.reduce((s, p) => s + parseFloat(p.valuacion_ars || 0), 0)
 
-  // Agrupar por moneda de la especie
-  const porMoneda = items.reduce((acc, p) => {
+  // ── Datos para tortas ─────────────────────────────────────────────
+
+  // Por tipo
+  const porTipoMap = items.reduce((acc, p) => {
+    const t = p.tipo || 'otro'
+    acc[t] = (acc[t] || 0) + parseFloat(p.valuacion_ars || 0)
+    return acc
+  }, {})
+  const datosTipo = Object.entries(porTipoMap)
+    .map(([tipo, value]) => ({ name: LABEL_TIPO[tipo] || tipo, value, tipo }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+
+  // Por moneda
+  const porMonedaMap = items.reduce((acc, p) => {
+    const m = p.moneda || 'ARS'
+    acc[m] = (acc[m] || 0) + parseFloat(p.valuacion_ars || 0)
+    return acc
+  }, {})
+  const datosMoneda = Object.entries(porMonedaMap)
+    .map(([moneda, value]) => ({ name: moneda, value, moneda }))
+    .filter(d => d.value > 0)
+
+  // Por custodio (solo cuando filtro = Todos)
+  const porCustodioMap = posiciones.reduce((acc, p) => {
+    const c = p.custodio_nombre || 'Sin custodio'
+    acc[c] = (acc[c] || 0) + parseFloat(p.valuacion_ars || 0)
+    return acc
+  }, {})
+  const datosCustodio = Object.entries(porCustodioMap)
+    .map(([custodio, value]) => ({ name: custodio, value, custodio }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+
+  // ── Tablas de detalle ─────────────────────────────────────────────
+  const porMonedaDetalle = items.reduce((acc, p) => {
     const m = p.moneda || 'ARS'
     if (!acc[m]) acc[m] = { moneda: m, valuacion_ars: 0, valuacion_usd: 0, cantidad: 0 }
     acc[m].valuacion_ars += parseFloat(p.valuacion_ars || 0)
@@ -53,8 +146,7 @@ function Informes({ posiciones }) {
     return acc
   }, {})
 
-  // ── Total por custodio (cuando filtro = Todos) ────────────────────
-  const porCustodio = posiciones.reduce((acc, p) => {
+  const porCustodioDetalle = posiciones.reduce((acc, p) => {
     const c = p.custodio_nombre || 'Sin custodio'
     if (!acc[c]) acc[c] = { custodio: c, valuacion_ars: 0, valuacion_usd: 0, cantidad: 0 }
     acc[c].valuacion_ars += parseFloat(p.valuacion_ars || 0)
@@ -63,14 +155,10 @@ function Informes({ posiciones }) {
     return acc
   }, {})
 
-  const totalARSTodos = posiciones.reduce((s, p) => s + parseFloat(p.valuacion_ars || 0), 0)
-
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-gray-700">📊 Informes de cartera</h2>
-
-        {/* Selector de custodio */}
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-400">Custodio</label>
           <select
@@ -83,17 +171,42 @@ function Informes({ posiciones }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      {/* Gráficos de torta */}
+      <div className={`grid gap-4 ${custodioFiltro === 'Todos' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <TortaCard
+          titulo={`Por tipo${custodioFiltro !== 'Todos' ? ` — ${custodioFiltro}` : ''}`}
+          datos={datosTipo}
+          colorKey="tipo"
+          colorMap={COLORES_TIPO}
+        />
+        <TortaCard
+          titulo={`Por moneda${custodioFiltro !== 'Todos' ? ` — ${custodioFiltro}` : ''}`}
+          datos={datosMoneda}
+          colorKey="moneda"
+          colorMap={COLORES_MONEDA}
+        />
+        {custodioFiltro === 'Todos' && (
+          <TortaCard
+            titulo="Por custodio"
+            datos={datosCustodio}
+            colorKey="custodio"
+            colorMap={null}
+          />
+        )}
+      </div>
 
-        {/* ── Por moneda ── */}
+      {/* Tablas de detalle */}
+      <div className="grid grid-cols-2 gap-6 pt-2 border-t border-gray-100">
+
+        {/* Por moneda */}
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
-            Composición por moneda
+            Detalle por moneda
             {custodioFiltro !== 'Todos' && <span className="text-indigo-400 ml-1">— {custodioFiltro}</span>}
           </p>
           <div className="space-y-2">
-            {Object.values(porMoneda).map(m => {
-              const pctARS = totalARS > 0 ? (m.valuacion_ars / totalARS * 100) : 0
+            {Object.values(porMonedaDetalle).map(m => {
+              const pct = totalARS > 0 ? (m.valuacion_ars / totalARS * 100) : 0
               return (
                 <div key={m.moneda}>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
@@ -103,17 +216,10 @@ function Informes({ posiciones }) {
                       </span>
                       {m.cantidad} especie{m.cantidad !== 1 ? 's' : ''}
                     </span>
-                    <span className="font-bold text-gray-700">{pctARS.toFixed(1)}%</span>
+                    <span className="font-bold text-gray-700">{pct.toFixed(1)}%</span>
                   </div>
-                  {/* Barra de progreso */}
-                  <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{
-                        width: `${pctARS}%`,
-                        backgroundColor: m.moneda === 'USD' ? '#1a6eb5' : '#e67e22'
-                      }}
-                    />
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1">
+                    <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORES_MONEDA[m.moneda] || '#4F6EF7' }} />
                   </div>
                   <div className="flex justify-between text-xs text-gray-400">
                     <span>${fmt(m.valuacion_ars)}</span>
@@ -122,27 +228,20 @@ function Informes({ posiciones }) {
                 </div>
               )
             })}
-
-            {/* Total */}
             <div className="pt-2 border-t border-gray-100 flex justify-between text-sm">
               <span className="text-gray-500 font-semibold">Total</span>
-              <div className="text-right">
-                <p className="font-bold text-gray-800">${fmt(totalARS)}</p>
-                <p className="text-xs text-gray-400">USD {fmt(totalUSD, 2)}</p>
-              </div>
+              <p className="font-bold text-gray-800">${fmt(totalARS)}</p>
             </div>
           </div>
         </div>
 
-        {/* ── Por custodio ── */}
+        {/* Por custodio */}
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
-            Composición por custodio
-          </p>
+          <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Detalle por custodio</p>
           <div className="space-y-2">
-            {Object.values(porCustodio)
+            {Object.values(porCustodioDetalle)
               .sort((a, b) => b.valuacion_ars - a.valuacion_ars)
-              .map(c => {
+              .map((c, idx) => {
                 const pct = totalARSTodos > 0 ? (c.valuacion_ars / totalARSTodos * 100) : 0
                 const isActivo = custodioFiltro === c.custodio
                 return (
@@ -150,20 +249,15 @@ function Informes({ posiciones }) {
                     key={c.custodio}
                     className={`cursor-pointer rounded-lg p-1 -mx-1 transition-colors ${isActivo ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
                     onClick={() => setCustodioFiltro(prev => prev === c.custodio ? 'Todos' : c.custodio)}
-                    title="Click para filtrar por este custodio"
                   >
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span className={`font-semibold ${isActivo ? 'text-indigo-600' : ''}`}>
-                        🏛️ {c.custodio}
-                        <span className="text-gray-400 font-normal ml-1">({c.cantidad})</span>
+                        🏛️ {c.custodio} <span className="text-gray-400 font-normal">({c.cantidad})</span>
                       </span>
                       <span className="font-bold text-gray-700">{pct.toFixed(1)}%</span>
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{ width: `${pct}%`, backgroundColor: '#4F6EF7' }}
-                      />
+                    <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1">
+                      <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORES_CUSTODIO[idx % COLORES_CUSTODIO.length] }} />
                     </div>
                     <div className="flex justify-between text-xs text-gray-400">
                       <span>${fmt(c.valuacion_ars)}</span>
@@ -172,17 +266,12 @@ function Informes({ posiciones }) {
                   </div>
                 )
               })}
-
-            {/* Total */}
             <div className="pt-2 border-t border-gray-100 flex justify-between text-sm">
               <span className="text-gray-500 font-semibold">Total</span>
-              <div className="text-right">
-                <p className="font-bold text-gray-800">${fmt(totalARSTodos)}</p>
-              </div>
+              <p className="font-bold text-gray-800">${fmt(totalARSTodos)}</p>
             </div>
           </div>
         </div>
-
       </div>
     </div>
   )
