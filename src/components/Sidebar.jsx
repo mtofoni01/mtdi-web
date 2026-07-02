@@ -14,6 +14,7 @@ const navItems = [
   { to: '/usuarios',            label: '👥 Usuarios',              admin: true },
   { to: '/comisiones',          label: '💹 Comisiones',            admin: true },
   { to: '/custodios',           label: '🏛️ Custodios',             admin: true },
+  { to: '/especies',            label: '🏷️ Especies',              admin: true },
 ]
 
 export default function Sidebar() {

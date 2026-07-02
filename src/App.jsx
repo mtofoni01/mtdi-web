@@ -12,6 +12,7 @@ import Gastos from './pages/Gastos'
 import Usuarios from './pages/Usuarios'
 import Comisiones from './pages/Comisiones'
 import Custodios from './pages/Custodios'
+import Especies from './pages/Especies'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="usuarios"            element={<Usuarios />} />
             <Route path="comisiones"          element={<Comisiones />} />
             <Route path="custodios"           element={<Custodios />} />
+            <Route path="especies"            element={<Especies />} />
           </Route>
           <Route path="*" element={<Navigate to="/cartera" replace />} />
         </Routes>
