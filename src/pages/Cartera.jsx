@@ -2,8 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import EspecieDetalle from '../components/EspecieDetalle'
 
-const AZUL = '#4F6EF7'
-
 function fmt(n, dec = 0) {
   return parseFloat(n || 0).toLocaleString('es-AR', { maximumFractionDigits: dec })
 }
@@ -27,6 +25,170 @@ const colorTipo = (tipo) => {
   return map[tipo] || '#555'
 }
 
+// ── Componente de informes ─────────────────────────────────────────
+function Informes({ posiciones }) {
+  const [custodioFiltro, setCustodioFiltro] = useState('Todos')
+
+  // Lista de custodios únicos
+  const custodios = ['Todos', ...new Set(
+    posiciones.map(p => p.custodio_nombre).filter(Boolean)
+  )]
+
+  // Posiciones filtradas por custodio
+  const items = custodioFiltro === 'Todos'
+    ? posiciones
+    : posiciones.filter(p => p.custodio_nombre === custodioFiltro)
+
+  // ── Total por moneda ──────────────────────────────────────────────
+  const totalARS = items.reduce((s, p) => s + parseFloat(p.valuacion_ars || 0), 0)
+  const totalUSD = items.reduce((s, p) => s + parseFloat(p.valuacion_usd || 0), 0)
+
+  // Agrupar por moneda de la especie
+  const porMoneda = items.reduce((acc, p) => {
+    const m = p.moneda || 'ARS'
+    if (!acc[m]) acc[m] = { moneda: m, valuacion_ars: 0, valuacion_usd: 0, cantidad: 0 }
+    acc[m].valuacion_ars += parseFloat(p.valuacion_ars || 0)
+    acc[m].valuacion_usd += parseFloat(p.valuacion_usd || 0)
+    acc[m].cantidad++
+    return acc
+  }, {})
+
+  // ── Total por custodio (cuando filtro = Todos) ────────────────────
+  const porCustodio = posiciones.reduce((acc, p) => {
+    const c = p.custodio_nombre || 'Sin custodio'
+    if (!acc[c]) acc[c] = { custodio: c, valuacion_ars: 0, valuacion_usd: 0, cantidad: 0 }
+    acc[c].valuacion_ars += parseFloat(p.valuacion_ars || 0)
+    acc[c].valuacion_usd += parseFloat(p.valuacion_usd || 0)
+    acc[c].cantidad++
+    return acc
+  }, {})
+
+  const totalARSTodos = posiciones.reduce((s, p) => s + parseFloat(p.valuacion_ars || 0), 0)
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-gray-700">📊 Informes de cartera</h2>
+
+        {/* Selector de custodio */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Custodio</label>
+          <select
+            value={custodioFiltro}
+            onChange={e => setCustodioFiltro(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-400"
+          >
+            {custodios.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+
+        {/* ── Por moneda ── */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
+            Composición por moneda
+            {custodioFiltro !== 'Todos' && <span className="text-indigo-400 ml-1">— {custodioFiltro}</span>}
+          </p>
+          <div className="space-y-2">
+            {Object.values(porMoneda).map(m => {
+              const pctARS = totalARS > 0 ? (m.valuacion_ars / totalARS * 100) : 0
+              return (
+                <div key={m.moneda}>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span className="font-semibold">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold mr-1 ${m.moneda === 'USD' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>
+                        {m.moneda}
+                      </span>
+                      {m.cantidad} especie{m.cantidad !== 1 ? 's' : ''}
+                    </span>
+                    <span className="font-bold text-gray-700">{pctARS.toFixed(1)}%</span>
+                  </div>
+                  {/* Barra de progreso */}
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${pctARS}%`,
+                        backgroundColor: m.moneda === 'USD' ? '#1a6eb5' : '#e67e22'
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>${fmt(m.valuacion_ars)}</span>
+                    <span>USD {fmt(m.valuacion_usd, 2)}</span>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Total */}
+            <div className="pt-2 border-t border-gray-100 flex justify-between text-sm">
+              <span className="text-gray-500 font-semibold">Total</span>
+              <div className="text-right">
+                <p className="font-bold text-gray-800">${fmt(totalARS)}</p>
+                <p className="text-xs text-gray-400">USD {fmt(totalUSD, 2)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Por custodio ── */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
+            Composición por custodio
+          </p>
+          <div className="space-y-2">
+            {Object.values(porCustodio)
+              .sort((a, b) => b.valuacion_ars - a.valuacion_ars)
+              .map(c => {
+                const pct = totalARSTodos > 0 ? (c.valuacion_ars / totalARSTodos * 100) : 0
+                const isActivo = custodioFiltro === c.custodio
+                return (
+                  <div
+                    key={c.custodio}
+                    className={`cursor-pointer rounded-lg p-1 -mx-1 transition-colors ${isActivo ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                    onClick={() => setCustodioFiltro(prev => prev === c.custodio ? 'Todos' : c.custodio)}
+                    title="Click para filtrar por este custodio"
+                  >
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span className={`font-semibold ${isActivo ? 'text-indigo-600' : ''}`}>
+                        🏛️ {c.custodio}
+                        <span className="text-gray-400 font-normal ml-1">({c.cantidad})</span>
+                      </span>
+                      <span className="font-bold text-gray-700">{pct.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                      <div
+                        className="h-2 rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: '#4F6EF7' }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>${fmt(c.valuacion_ars)}</span>
+                      <span>USD {fmt(c.valuacion_usd, 2)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+
+            {/* Total */}
+            <div className="pt-2 border-t border-gray-100 flex justify-between text-sm">
+              <span className="text-gray-500 font-semibold">Total</span>
+              <div className="text-right">
+                <p className="font-bold text-gray-800">${fmt(totalARSTodos)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
+// ── Cartera principal ──────────────────────────────────────────────
 export default function Cartera() {
   const { authFetch, usuario } = useAuth()
   const [posiciones, setPosiciones] = useState([])
@@ -36,6 +198,7 @@ export default function Cartera() {
   const [sortDir, setSortDir]       = useState('asc')
   const [seleccionado, setSeleccionado] = useState(null)
   const [ejecutando, setEjecutando] = useState(false)
+  const [mostrarInformes, setMostrarInformes] = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -96,6 +259,12 @@ export default function Cartera() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">📈 Mi cartera</h1>
         <div className="flex gap-3">
+          <button
+            onClick={() => setMostrarInformes(v => !v)}
+            className={`px-4 py-2 text-sm rounded-lg border transition-colors ${mostrarInformes ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-gray-200 hover:bg-gray-50'}`}
+          >
+            📊 Informes
+          </button>
           <button onClick={cargar}
             className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">
             ↻ Actualizar
@@ -126,6 +295,11 @@ export default function Cartera() {
             <p className="text-2xl font-bold text-gray-800 mt-1">{resumen.cantidad}</p>
           </div>
         </div>
+      )}
+
+      {/* Informes colapsables */}
+      {mostrarInformes && posiciones.length > 0 && (
+        <Informes posiciones={posiciones} />
       )}
 
       <div className="flex gap-6">
