@@ -273,6 +273,52 @@ function Informes({ posiciones }) {
           </div>
         </div>
       </div>
+
+      {/* TIR y Duration ponderadas */}
+      {(() => {
+        // Solo especies con tir y duration y valuacion > 0
+        const conTir = items.filter(p => p.tir && parseFloat(p.tir) > 0 && parseFloat(p.valuacion_ars) > 0)
+        const conDur = items.filter(p => p.duration && parseFloat(p.duration) > 0 && parseFloat(p.valuacion_ars) > 0)
+
+        const sumValTir = conTir.reduce((s, p) => s + parseFloat(p.valuacion_ars), 0)
+        const sumValDur = conDur.reduce((s, p) => s + parseFloat(p.valuacion_ars), 0)
+
+        const tirPond = sumValTir > 0
+          ? conTir.reduce((s, p) => s + parseFloat(p.tir) * parseFloat(p.valuacion_ars), 0) / sumValTir
+          : null
+
+        const durPond = sumValDur > 0
+          ? conDur.reduce((s, p) => s + parseFloat(p.duration) * parseFloat(p.valuacion_ars), 0) / sumValDur
+          : null
+
+        if (!tirPond && !durPond) return null
+
+        return (
+          <div className="pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-500 uppercase mb-3">
+              Métricas ponderadas por valuación
+              {custodioFiltro !== 'Todos' && <span className="text-indigo-400 ml-1">— {custodioFiltro}</span>}
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              {tirPond !== null && (
+                <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                  <p className="text-xs text-amber-600 mb-1">TIR promedio ponderada</p>
+                  <p className="text-2xl font-bold text-amber-700">{tirPond.toFixed(2)}%</p>
+                  <p className="text-xs text-amber-500 mt-1">{conTir.length} especie{conTir.length !== 1 ? 's' : ''} con TIR</p>
+                </div>
+              )}
+              {durPond !== null && (
+                <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                  <p className="text-xs text-indigo-600 mb-1">Duration promedio ponderada</p>
+                  <p className="text-2xl font-bold text-indigo-700">{durPond.toFixed(2)} <span className="text-sm font-normal">años</span></p>
+                  <p className="text-xs text-indigo-400 mt-1">{conDur.length} especie{conDur.length !== 1 ? 's' : ''} con Duration</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }
