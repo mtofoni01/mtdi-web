@@ -110,7 +110,7 @@ function ScatterChart({ puntos, titulo }) {
     for (let i = 0; i <= steps; i++) {
       const xVal = minDur + (i / steps) * (maxDur - minDur)
       const yVal = regFn(xVal)
-      if (yVal < minTir - 5 || yVal > maxTir + 5) continue // clip extremos
+      if (yVal < minTir - 20 || yVal > maxTir + 20) continue // clip extremos
       points.push(`${xScale(xVal).toFixed(1)},${yScale(yVal).toFixed(1)}`)
     }
     if (points.length < 2) return null
@@ -186,8 +186,8 @@ function ScatterChart({ puntos, titulo }) {
               fill="none"
               stroke="#4F6EF7"
               strokeWidth="2"
-              strokeDasharray="6 3"
-              opacity="0.5"
+              strokeDasharray="8 4"
+              opacity="0.7"
             />
           )}
 
