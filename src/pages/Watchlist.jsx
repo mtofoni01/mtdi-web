@@ -73,7 +73,7 @@ export default function Watchlist() {
                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: '#b5700a' }}>{item.tir ? `${parseFloat(item.tir).toFixed(2)}%` : '-'}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: '#b5700a' }}>{item.duration ? parseFloat(item.duration).toFixed(2) : '-'}</td>
                     <td className="px-4 py-3 text-xs text-gray-400">{item.volumen_operado ? `$${(parseFloat(item.volumen_operado)/1e6).toFixed(1)}M` : '-'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{item.fecha_precio ? new Date(item.fecha_precio).toLocaleDateString('es-AR') : '-'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{item.fecha_precio ? new Date(item.fecha_precio + 'T12:00:00').toLocaleDateString('es-AR') : '-'}</td>
                   </tr>
                 ))}
               </tbody>

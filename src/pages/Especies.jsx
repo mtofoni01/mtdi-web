@@ -261,7 +261,7 @@ export default function Especies() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
-                      {esp.fecha_vto ? new Date(esp.fecha_vto).toLocaleDateString('es-AR') : '-'}
+                      {esp.fecha_vto ? new Date(esp.fecha_vto + 'T12:00:00').toLocaleDateString('es-AR') : '-'}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${esp.activo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
