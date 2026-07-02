@@ -22,6 +22,23 @@ const LABEL_TIPO = {
   on:        'ON',
 }
 
+// ── Regresión lineal grado 1 (para 2 puntos) ──────────────────────
+function linearReg(puntos) {
+  const n = puntos.length
+  if (n < 2) return null
+  const x  = puntos.map(p => p.duration)
+  const y  = puntos.map(p => p.tir)
+  const sx = x.reduce((a, v) => a + v, 0)
+  const sy = y.reduce((a, v) => a + v, 0)
+  const sxy = x.reduce((a, v, i) => a + v * y[i], 0)
+  const sx2 = x.reduce((a, v) => a + v ** 2, 0)
+  const denom = n * sx2 - sx * sx
+  if (Math.abs(denom) < 1e-10) return null
+  const b = (n * sxy - sx * sy) / denom
+  const a = (sy - b * sx) / n
+  return (xVal) => a + b * xVal
+}
+
 // ── Regresión polinómica grado 2 (mínimos cuadrados) ──────────────
 // Resuelve el sistema [a, b, c] tal que y ≈ a·x² + b·x + c
 function polyReg2(puntos) {
@@ -31,7 +48,6 @@ function polyReg2(puntos) {
   const x  = puntos.map(p => p.duration)
   const y  = puntos.map(p => p.tir)
 
-  // Sumatoria de potencias de x
   const s0  = n
   const s1  = x.reduce((a, v) => a + v, 0)
   const s2  = x.reduce((a, v) => a + v ** 2, 0)
@@ -41,7 +57,6 @@ function polyReg2(puntos) {
   const t1  = x.reduce((a, v, i) => a + v * y[i], 0)
   const t2  = x.reduce((a, v, i) => a + v ** 2 * y[i], 0)
 
-  // Matriz 3x3 (método de Cramer simplificado con eliminación gaussiana)
   let M = [
     [s4, s3, s2, t2],
     [s3, s2, s1, t1],
@@ -49,15 +64,12 @@ function polyReg2(puntos) {
   ]
 
   for (let col = 0; col < 3; col++) {
-    // Pivoteo parcial
     let maxRow = col
     for (let row = col + 1; row < 3; row++) {
       if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row
     }
     ;[M[col], M[maxRow]] = [M[maxRow], M[col]]
-
     if (Math.abs(M[col][col]) < 1e-10) return null
-
     for (let row = 0; row < 3; row++) {
       if (row === col) continue
       const factor = M[row][col] / M[col][col]
@@ -70,6 +82,12 @@ function polyReg2(puntos) {
   const c = M[2][3] / M[2][2]
 
   return (xVal) => a * xVal ** 2 + b * xVal + c
+}
+
+// Elige el mejor ajuste según cantidad de puntos
+function bestFit(puntos) {
+  if (puntos.length >= 3) return polyReg2(puntos) || linearReg(puntos)
+  return linearReg(puntos)
 }
 
 function ScatterChart({ puntos, titulo }) {
@@ -102,22 +120,26 @@ function ScatterChart({ puntos, titulo }) {
   const yScale = v => PAD.top  + chartH - ((v - minTir) / (maxTir - minTir)) * chartH
 
   // Calcular curva de regresión
-  const regFn = polyReg2(puntos)
+  const regFn = bestFit(puntos)
   const curvePath = (() => {
     if (!regFn) return null
-    const steps = 80
+    const steps = 100
     const points = []
     for (let i = 0; i <= steps; i++) {
       const xVal = minDur + (i / steps) * (maxDur - minDur)
       const yVal = regFn(xVal)
-      if (yVal < minTir - 20 || yVal > maxTir + 20) continue // clip extremos
-      points.push(`${xScale(xVal).toFixed(1)},${yScale(yVal).toFixed(1)}`)
+      // clip suave: solo excluir valores muy extremos
+      if (!isFinite(yVal) || yVal < minTir - 50 || yVal > maxTir + 50) continue
+      // clampear al área del gráfico para que no salga del SVG
+      const cx = xScale(xVal)
+      const cy = Math.max(PAD.top, Math.min(H - PAD.bottom, yScale(yVal)))
+      points.push(`${cx.toFixed(1)},${cy.toFixed(1)}`)
     }
     if (points.length < 2) return null
     return 'M' + points.join(' L')
   })()
 
-  // Grillas
+
   const xTicks = 5
   const yTicks = 5
   const xStep  = (maxDur - minDur) / xTicks
