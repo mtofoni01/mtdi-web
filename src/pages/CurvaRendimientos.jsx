@@ -22,6 +22,56 @@ const LABEL_TIPO = {
   on:        'ON',
 }
 
+// ── Regresión polinómica grado 2 (mínimos cuadrados) ──────────────
+// Resuelve el sistema [a, b, c] tal que y ≈ a·x² + b·x + c
+function polyReg2(puntos) {
+  const n  = puntos.length
+  if (n < 3) return null
+
+  const x  = puntos.map(p => p.duration)
+  const y  = puntos.map(p => p.tir)
+
+  // Sumatoria de potencias de x
+  const s0  = n
+  const s1  = x.reduce((a, v) => a + v, 0)
+  const s2  = x.reduce((a, v) => a + v ** 2, 0)
+  const s3  = x.reduce((a, v) => a + v ** 3, 0)
+  const s4  = x.reduce((a, v) => a + v ** 4, 0)
+  const t0  = y.reduce((a, v) => a + v, 0)
+  const t1  = x.reduce((a, v, i) => a + v * y[i], 0)
+  const t2  = x.reduce((a, v, i) => a + v ** 2 * y[i], 0)
+
+  // Matriz 3x3 (método de Cramer simplificado con eliminación gaussiana)
+  let M = [
+    [s4, s3, s2, t2],
+    [s3, s2, s1, t1],
+    [s2, s1, s0, t0],
+  ]
+
+  for (let col = 0; col < 3; col++) {
+    // Pivoteo parcial
+    let maxRow = col
+    for (let row = col + 1; row < 3; row++) {
+      if (Math.abs(M[row][col]) > Math.abs(M[maxRow][col])) maxRow = row
+    }
+    ;[M[col], M[maxRow]] = [M[maxRow], M[col]]
+
+    if (Math.abs(M[col][col]) < 1e-10) return null
+
+    for (let row = 0; row < 3; row++) {
+      if (row === col) continue
+      const factor = M[row][col] / M[col][col]
+      for (let k = col; k <= 3; k++) M[row][k] -= factor * M[col][k]
+    }
+  }
+
+  const a = M[0][3] / M[0][0]
+  const b = M[1][3] / M[1][1]
+  const c = M[2][3] / M[2][2]
+
+  return (xVal) => a * xVal ** 2 + b * xVal + c
+}
+
 function ScatterChart({ puntos, titulo }) {
   const svgRef   = useRef(null)
   const [tooltip, setTooltip] = useState(null)
@@ -50,6 +100,22 @@ function ScatterChart({ puntos, titulo }) {
 
   const xScale = v => PAD.left + ((v - minDur) / (maxDur - minDur)) * chartW
   const yScale = v => PAD.top  + chartH - ((v - minTir) / (maxTir - minTir)) * chartH
+
+  // Calcular curva de regresión
+  const regFn = polyReg2(puntos)
+  const curvePath = (() => {
+    if (!regFn) return null
+    const steps = 80
+    const points = []
+    for (let i = 0; i <= steps; i++) {
+      const xVal = minDur + (i / steps) * (maxDur - minDur)
+      const yVal = regFn(xVal)
+      if (yVal < minTir - 5 || yVal > maxTir + 5) continue // clip extremos
+      points.push(`${xScale(xVal).toFixed(1)},${yScale(yVal).toFixed(1)}`)
+    }
+    if (points.length < 2) return null
+    return 'M' + points.join(' L')
+  })()
 
   // Grillas
   const xTicks = 5
@@ -112,6 +178,18 @@ function ScatterChart({ puntos, titulo }) {
           >
             TIR (%)
           </text>
+
+          {/* Curva de regresión polinómica grado 2 */}
+          {curvePath && (
+            <path
+              d={curvePath}
+              fill="none"
+              stroke="#4F6EF7"
+              strokeWidth="2"
+              strokeDasharray="6 3"
+              opacity="0.5"
+            />
+          )}
 
           {/* Puntos */}
           {puntos.map((p, i) => {
