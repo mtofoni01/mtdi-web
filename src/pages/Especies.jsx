@@ -32,11 +32,15 @@ export default function Especies() {
   const { authFetch } = useAuth()
   const [especies, setEspecies]   = useState([])
   const [cargando, setCargando]   = useState(true)
-  const [editando, setEditando]   = useState(null)   // especie en edición
+  const [editando, setEditando]   = useState(null)
   const [form, setForm]           = useState({})
   const [guardando, setGuardando] = useState(false)
-  const [mensaje, setMensaje]     = useState(null)   // { tipo: 'ok'|'error', texto }
+  const [mensaje, setMensaje]     = useState(null)
   const [busqueda, setBusqueda]   = useState('')
+  const [formNueva, setFormNueva] = useState({
+    ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: ''
+  })
+  const [agregando, setAgregando] = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -87,7 +91,51 @@ export default function Especies() {
     }
   }
 
-  const filtradas = especies.filter(e =>
+  const agregarEspecie = async () => {
+    const { ticker, descripcion, tipo, moneda } = formNueva
+    if (!ticker || !descripcion || !tipo || !moneda) {
+      setMensaje({ tipo: 'error', texto: 'Ticker, descripción, tipo y moneda son obligatorios' })
+      return
+    }
+    setAgregando(true)
+    setMensaje(null)
+    try {
+      const res  = await authFetch('/api/cartera/especies', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticker:      ticker.toUpperCase().trim(),
+          descripcion: descripcion.trim(),
+          tipo,
+          moneda,
+          fecha_vto:   formNueva.fecha_vto || null,
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Error al agregar')
+      setMensaje({ tipo: 'ok', texto: `Especie ${ticker.toUpperCase()} agregada correctamente` })
+      setFormNueva({ ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: '' })
+      cargar()
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
+    } finally {
+      setAgregando(false)
+    }
+  }
+
+
+    try {
+      await authFetch(`/api/cartera/especies/${ticker}/seguimiento`, {
+        method: 'PUT',
+        body: JSON.stringify({ en_seguimiento: !valorActual }),
+      })
+      // Actualizar localmente sin recargar toda la lista
+      setEspecies(prev => prev.map(e =>
+        e.ticker === ticker ? { ...e, en_seguimiento: !valorActual } : e
+      ))
+    } catch {}
+  }
+
+
     !busqueda ||
     e.ticker.toLowerCase().includes(busqueda.toLowerCase()) ||
     (e.descripcion || '').toLowerCase().includes(busqueda.toLowerCase())
@@ -107,7 +155,71 @@ export default function Especies() {
         </div>
       )}
 
-      {/* Buscador */}
+      {/* Formulario nueva especie */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <h2 className="font-semibold text-gray-700 mb-4">Nueva especie</h2>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Ticker *</label>
+            <input
+              type="text"
+              value={formNueva.ticker}
+              onChange={e => setFormNueva(f => ({ ...f, ticker: e.target.value.toUpperCase() }))}
+              placeholder="Ej: GD35"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-28 focus:outline-none focus:border-indigo-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Descripción *</label>
+            <input
+              type="text"
+              value={formNueva.descripcion}
+              onChange={e => setFormNueva(f => ({ ...f, descripcion: e.target.value }))}
+              placeholder="Ej: Global 2035"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm w-52 focus:outline-none focus:border-indigo-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Tipo *</label>
+            <select
+              value={formNueva.tipo}
+              onChange={e => setFormNueva(f => ({ ...f, tipo: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            >
+              {TIPOS_ESPECIE.map(t => <option key={t.v} value={t.v}>{t.l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Moneda *</label>
+            <select
+              value={formNueva.moneda}
+              onChange={e => setFormNueva(f => ({ ...f, moneda: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            >
+              {MONEDAS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Vencimiento</label>
+            <input
+              type="date"
+              value={formNueva.fecha_vto}
+              onChange={e => setFormNueva(f => ({ ...f, fecha_vto: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            />
+          </div>
+          <button
+            onClick={agregarEspecie}
+            disabled={agregando}
+            className="px-4 py-2 text-sm text-white rounded-lg disabled:opacity-60"
+            style={{ backgroundColor: '#4F6EF7' }}
+          >
+            {agregando ? 'Agregando...' : '＋ Agregar'}
+          </button>
+        </div>
+      </div>
+
+
       <input
         type="text"
         value={busqueda}
@@ -158,9 +270,17 @@ export default function Especies() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${esp.en_seguimiento ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
-                        {esp.en_seguimiento ? '👁️ Sí' : 'No'}
-                      </span>
+                      <button
+                        onClick={() => toggleSeguimiento(esp.ticker, esp.en_seguimiento)}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors ${
+                          esp.en_seguimiento
+                            ? 'bg-indigo-100 text-indigo-600 border-indigo-200 hover:bg-indigo-200'
+                            : 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-indigo-50 hover:text-indigo-400'
+                        }`}
+                        title={esp.en_seguimiento ? 'Quitar del seguimiento' : 'Agregar al seguimiento'}
+                      >
+                        {esp.en_seguimiento ? '👁️ Sí' : '＋ No'}
+                      </button>
                     </td>
                     <td className="px-4 py-3">
                       {editando !== esp.ticker && (
