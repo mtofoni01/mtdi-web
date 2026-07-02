@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import EspecieDetalle from '../components/EspecieDetalle'
 
 const AZUL = '#4F6EF7'
 
@@ -35,7 +35,6 @@ export default function Cartera() {
   const [sortCol, setSortCol]       = useState('ticker')
   const [sortDir, setSortDir]       = useState('asc')
   const [seleccionado, setSeleccionado] = useState(null)
-  const [historial, setHistorial]   = useState([])
   const [ejecutando, setEjecutando] = useState(false)
 
   const cargar = useCallback(async () => {
@@ -59,13 +58,8 @@ export default function Cartera() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const verDetalle = async (item) => {
-    setSeleccionado(item)
-    try {
-      const res  = await authFetch(`/api/cartera/posiciones/${item.ticker}`)
-      const data = await res.json()
-      setHistorial(data.data?.historial || [])
-    } catch {}
+  const verDetalle = (item) => {
+    setSeleccionado(prev => prev?.ticker === item.ticker ? null : item)
   }
 
   const sort = (col) => {
@@ -96,12 +90,6 @@ export default function Cartera() {
       {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
     </th>
   )
-
-  const grafData = [...historial].reverse().slice(-30).map(p => ({
-    fecha: new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }),
-    ars:   parseFloat(p.precio_cierre_ars || 0),
-    usd:   parseFloat(p.precio_cierre_usd || 0),
-  }))
 
   return (
     <div className="space-y-6">
@@ -152,19 +140,19 @@ export default function Cartera() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <Th col="ticker"        label="Ticker" />
-                    <Th col="tipo"          label="Tipo" />
-                    <Th col="vn_actual"     label="VN" />
-                    <Th col="precio_promedio" label="P. Compra" />
-                    <Th col="precio_cierre_ars" label="P. Mercado ARS" />
-                    <Th col="precio_cierre_usd" label="P. Mercado USD" />
-                    <Th col="valuacion_ars" label="Val. ARS" />
-                    <Th col="valuacion_usd" label="Val. USD" />
-                    <Th col="resultado_pct" label="Result. %" />
-                    <Th col="tir"           label="TIR" />
-                    <Th col="duration"      label="MD" />
-                    <Th col="volumen_operado" label="Volumen" />
-                    <Th col="custodio_nombre" label="Custodio" />
+                    <Th col="ticker"             label="Ticker" />
+                    <Th col="tipo"               label="Tipo" />
+                    <Th col="vn_actual"          label="VN" />
+                    <Th col="precio_promedio"    label="P. Compra" />
+                    <Th col="precio_cierre_ars"  label="P. Mercado ARS" />
+                    <Th col="precio_cierre_usd"  label="P. Mercado USD" />
+                    <Th col="valuacion_ars"      label="Val. ARS" />
+                    <Th col="valuacion_usd"      label="Val. USD" />
+                    <Th col="resultado_pct"      label="Result. %" />
+                    <Th col="tir"                label="TIR" />
+                    <Th col="duration"           label="MD" />
+                    <Th col="volumen_operado"    label="Volumen" />
+                    <Th col="custodio_nombre"    label="Custodio" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -209,73 +197,11 @@ export default function Cartera() {
 
         {/* Panel de detalle */}
         {seleccionado && (
-          <div className="w-80 space-y-4">
-            <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-white px-3 py-1 rounded"
-                  style={{ backgroundColor: colorTipo(seleccionado.tipo) }}>
-                  {seleccionado.ticker}
-                </span>
-                <button onClick={() => setSeleccionado(null)} className="text-gray-300 hover:text-gray-500">✕</button>
-              </div>
-              <p className="text-sm text-gray-600 mb-4">{seleccionado.descripcion}</p>
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                {[
-                  { l: 'VN', v: fmt(seleccionado.vn_actual) },
-                  { l: 'P. Compra', v: parseFloat(seleccionado.precio_promedio || 0).toFixed(2) },
-                  { l: 'Val. ARS', v: `$${fmt(seleccionado.valuacion_ars)}` },
-                  { l: 'Val. USD', v: `USD ${fmt(seleccionado.valuacion_usd)}` },
-                  { l: 'TIR actual', v: seleccionado.tir ? `${parseFloat(seleccionado.tir).toFixed(2)}%` : '-' },
-                  { l: 'Duration', v: seleccionado.duration ? parseFloat(seleccionado.duration).toFixed(2) : '-' },
-                  { l: 'Dólar', v: seleccionado.dolar_venta ? `$${fmt(seleccionado.dolar_venta)}` : '-' },
-                  { l: 'Volumen', v: abreviarVol(seleccionado.volumen_operado) },
-                ].map(({ l, v }) => (
-                  <div key={l}>
-                    <p className="text-xs text-gray-400">{l}</p>
-                    <p className="font-semibold text-gray-800">{v}</p>
-                  </div>
-                ))}
-              </div>
-
-              {seleccionado.resultado_pct !== null && (
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-xs text-gray-400">Resultado</p>
-                  <p className="text-lg font-bold" style={{ color: parseFloat(seleccionado.resultado_pct) >= 0 ? '#27ae60' : '#e74c3c' }}>
-                    {parseFloat(seleccionado.resultado_pct) >= 0 ? '▲' : '▼'} {Math.abs(parseFloat(seleccionado.resultado_pct)).toFixed(2)}%
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Gráfico */}
-            {grafData.length > 1 && (
-              <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <p className="text-xs font-semibold text-gray-500 mb-3">Precio ARS — últimos 30 días</p>
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={grafData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="fecha" tick={{ fontSize: 9 }} interval={4} />
-                    <YAxis tick={{ fontSize: 9 }} domain={['auto', 'auto']} />
-                    <Tooltip formatter={(v) => [`$${fmt(v)}`, 'ARS']} />
-                    <Line type="monotone" dataKey="ars" stroke={AZUL} dot={false} strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-
-                {/* Historial */}
-                <div className="mt-3 space-y-1 max-h-48 overflow-y-auto">
-                  {historial.slice(0, 10).map((p, i) => (
-                    <div key={i} className="flex justify-between text-xs text-gray-500 py-1 border-b border-gray-50">
-                      <span>{new Date(p.fecha).toLocaleDateString('es-AR')}</span>
-                      <span className="font-semibold">${fmt(p.precio_cierre_ars)}</span>
-                      <span className="text-indigo-500">USD {parseFloat(p.precio_cierre_usd || 0).toFixed(2)}</span>
-                      {p.tir && <span style={{ color: '#b5700a' }}>TIR {parseFloat(p.tir).toFixed(2)}%</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <EspecieDetalle
+            ticker={seleccionado.ticker}
+            datosBasicos={seleccionado}
+            onCerrar={() => setSeleccionado(null)}
+          />
         )}
       </div>
     </div>
