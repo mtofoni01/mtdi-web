@@ -1,0 +1,359 @@
+// pages/CalculadoraTIR.jsx
+import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '../context/AuthContext'
+
+// ── Newton-Raphson para calcular TIR ─────────────────────────────────
+// flows: array de { t, total } donde t es tiempo en años y total es el flujo
+// precio: precio sucio pagado (por cada 100 de VN)
+function calcularTIR(flujos, precio) {
+  if (!flujos || flujos.length === 0 || !precio) return null
+
+  // Función valor presente dado tasa r
+  const vp = (r) => flujos.reduce((s, f) => s + f.total / Math.pow(1 + r, f.t), 0)
+  // Derivada
+  const dvp = (r) => flujos.reduce((s, f) => s - f.t * f.total / Math.pow(1 + r, f.t + 1), 0)
+
+  let r = 0.08 // semilla inicial 8%
+  for (let i = 0; i < 200; i++) {
+    const fx  = vp(r) - precio
+    const dfx = dvp(r)
+    if (Math.abs(dfx) < 1e-12) break
+    const r1 = r - fx / dfx
+    if (Math.abs(r1 - r) < 1e-8) { r = r1; break }
+    r = r1
+    if (r < -0.99) return null // divergió
+  }
+  return r * 100 // retorna en %
+}
+
+function fmtFecha(f) {
+  if (!f) return '-'
+  // Si viene DD/MM/YYYY
+  if (f.includes('/')) return f
+  // Si viene YYYY-MM-DD
+  const [y, m, d] = f.split('-')
+  return `${d}/${m}/${y}`
+}
+
+export default function CalculadoraTIR() {
+  const { authFetch } = useAuth()
+  const [especies, setEspecies]     = useState([])
+  const [busqueda, setBusqueda]     = useState('')
+  const [ticker, setTicker]         = useState('')
+  const [precio, setPrecio]         = useState('')
+  const [cargandoEsp, setCargandoEsp] = useState(true)
+  const [cargandoFlujos, setCargandoFlujos] = useState(false)
+  const [datosBono, setDatosBono]   = useState(null)
+  const [tirCompra, setTirCompra]   = useState(null)
+  const [guardando, setGuardando]   = useState(false)
+  const [mensaje, setMensaje]       = useState(null)
+  const [tienePosicion, setTienePosicion] = useState(false)
+
+  // Cargar lista de especies Comafi
+  const cargarEspecies = useCallback(async () => {
+    setCargandoEsp(true)
+    try {
+      const res  = await authFetch('/api/cartera/comafi')
+      const data = await res.json()
+      setEspecies(data.data || [])
+    } catch {}
+    finally { setCargandoEsp(false) }
+  }, [authFetch])
+
+  useEffect(() => { cargarEspecies() }, [cargarEspecies])
+
+  // Cargar flujos al seleccionar ticker
+  const cargarFlujos = async (tk) => {
+    if (!tk) return
+    setCargandoFlujos(true)
+    setDatosBono(null)
+    setTirCompra(null)
+    setMensaje(null)
+    try {
+      const res  = await authFetch(`/api/cartera/flujos/${tk}`)
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error)
+      setDatosBono(data)
+
+      // Verificar si tiene posición para poder guardar
+      try {
+        const res2  = await authFetch(`/api/cartera/posiciones/${tk}`)
+        const data2 = await res2.json()
+        setTienePosicion(!!(data2.ok && data2.data?.posicion))
+      } catch { setTienePosicion(false) }
+
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
+    } finally {
+      setCargandoFlujos(false)
+    }
+  }
+
+  const seleccionarTicker = (tk) => {
+    setTicker(tk)
+    setBusqueda(tk)
+    setPrecio('')
+    cargarFlujos(tk)
+  }
+
+  // Calcular TIR al cambiar precio
+  const calcular = () => {
+    if (!datosBono || !precio) return
+    const p = parseFloat(precio)
+    if (isNaN(p) || p <= 0) return
+
+    const flujos = datosBono.flujos
+      .filter(f => f.t !== null && f.t > 0)
+      .map(f => ({ t: f.t, total: f.total }))
+
+    const tir = calcularTIR(flujos, p)
+    setTirCompra(tir)
+  }
+
+  // Guardar TIR de compra en posición
+  const guardarTIR = async () => {
+    if (!ticker || tirCompra === null) return
+    setGuardando(true)
+    setMensaje(null)
+    try {
+      const res  = await authFetch(`/api/cartera/posiciones/${ticker}/tir-compra`, {
+        method: 'PUT',
+        body: JSON.stringify({ tir_compra: parseFloat(tirCompra.toFixed(4)) }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error)
+      setMensaje({ tipo: 'ok', texto: `TIR de compra ${tirCompra.toFixed(2)}% guardada en posición ${ticker}` })
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const especiesFiltradas = especies.filter(e =>
+    !busqueda ||
+    e.ticker.toLowerCase().includes(busqueda.toLowerCase()) ||
+    (e.nombre || '').toLowerCase().includes(busqueda.toLowerCase())
+  ).slice(0, 10)
+
+  const diferenciaTIR = tirCompra !== null && datosBono?.tir
+    ? (datosBono.tir - tirCompra).toFixed(2)
+    : null
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold text-gray-800">🧮 Calculadora TIR</h1>
+
+      {mensaje && (
+        <div className={`px-4 py-3 rounded-lg text-sm border ${mensaje.tipo === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+          {mensaje.tipo === 'ok' ? '✓ ' : '⚠️ '}{mensaje.texto}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-6">
+
+        {/* ── Panel izquierdo: selector + input ── */}
+        <div className="space-y-4">
+
+          {/* Buscador de ticker */}
+          <div className="bg-white rounded-xl border border-gray-100 p-4">
+            <label className="text-xs font-semibold text-gray-500 uppercase block mb-2">
+              Seleccionar instrumento
+            </label>
+            <input
+              type="text"
+              value={busqueda}
+              onChange={e => { setBusqueda(e.target.value); setTicker('') }}
+              placeholder="Buscar ticker o nombre..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 mb-2"
+            />
+            {cargandoEsp ? (
+              <p className="text-xs text-gray-400 text-center py-2">Cargando...</p>
+            ) : (
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {especiesFiltradas.map(e => (
+                  <div
+                    key={e.ticker}
+                    onClick={() => seleccionarTicker(e.ticker)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${ticker === e.ticker ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                  >
+                    <div>
+                      <span className="font-bold text-xs bg-indigo-500 text-white px-1.5 py-0.5 rounded mr-2">{e.ticker}</span>
+                      <span className="text-gray-500 text-xs">{e.nombre?.slice(0, 25)}</span>
+                    </div>
+                    {e.tir_mercado && (
+                      <span className="text-xs font-semibold" style={{ color: '#b5700a' }}>
+                        {parseFloat(e.tir_mercado).toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {especiesFiltradas.length === 0 && busqueda && (
+                  <p className="text-xs text-gray-400 text-center py-4">Sin resultados</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Input precio */}
+          {datosBono && (
+            <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+              <label className="text-xs font-semibold text-gray-500 uppercase block">
+                Precio sucio de compra
+              </label>
+              <p className="text-xs text-gray-400">
+                Precio de mercado actual: <span className="font-semibold text-gray-700">{datosBono.precio}</span>
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={precio}
+                  onChange={e => { setPrecio(e.target.value); setTirCompra(null) }}
+                  placeholder={`Ej: ${datosBono.precio}`}
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+                  step="0.01"
+                />
+                <button
+                  onClick={calcular}
+                  disabled={!precio}
+                  className="px-4 py-2 text-sm text-white rounded-lg disabled:opacity-40"
+                  style={{ backgroundColor: '#4F6EF7' }}
+                >
+                  Calcular
+                </button>
+              </div>
+
+              {/* Resultado TIR */}
+              {tirCompra !== null && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                      <p className="text-xs text-amber-600 mb-1">TIR de compra</p>
+                      <p className="text-2xl font-bold text-amber-700">{tirCompra.toFixed(2)}%</p>
+                    </div>
+                    <div className="bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+                      <p className="text-xs text-indigo-600 mb-1">TIR de mercado</p>
+                      <p className="text-2xl font-bold text-indigo-700">{parseFloat(datosBono.tir).toFixed(2)}%</p>
+                    </div>
+                  </div>
+
+                  {diferenciaTIR !== null && (
+                    <div className={`rounded-xl p-3 border text-center ${parseFloat(diferenciaTIR) > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                      <p className="text-xs text-gray-500 mb-1">
+                        {parseFloat(diferenciaTIR) > 0
+                          ? '📈 TIR mercado > TIR compra — precio bajó'
+                          : '📉 TIR mercado < TIR compra — precio subió → posible ganancia'}
+                      </p>
+                      <p className={`text-lg font-bold ${parseFloat(diferenciaTIR) > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {parseFloat(diferenciaTIR) > 0 ? '+' : ''}{diferenciaTIR} pp
+                      </p>
+                    </div>
+                  )}
+
+                  {tienePosicion && (
+                    <button
+                      onClick={guardarTIR}
+                      disabled={guardando}
+                      className="w-full py-2 text-sm text-white rounded-lg disabled:opacity-60"
+                      style={{ backgroundColor: '#28a745' }}
+                    >
+                      {guardando ? 'Guardando...' : `💾 Guardar TIR en posición ${ticker}`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Panel derecho: datos del bono + flujos ── */}
+        <div className="col-span-2 space-y-4">
+          {cargandoFlujos && (
+            <div className="flex justify-center py-16">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500" />
+            </div>
+          )}
+
+          {datosBono && !cargandoFlujos && (
+            <>
+              {/* Datos del bono */}
+              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-sm font-bold text-white px-3 py-1 rounded bg-indigo-500">{datosBono.ticker}</span>
+                  <span className="text-gray-600 font-semibold">{datosBono.nombre}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{datosBono.moneda}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-4">
+                  {[
+                    { l: 'Precio sucio', v: datosBono.precio },
+                    { l: 'Precio limpio', v: datosBono.techValue },
+                    { l: 'Interés corrido', v: datosBono.accInt },
+                    { l: 'TIR mercado', v: `${parseFloat(datosBono.tir).toFixed(2)}%` },
+                    { l: 'Duration', v: `${parseFloat(datosBono.duration || 0).toFixed(2)} años` },
+                    { l: 'Vencimiento', v: fmtFecha(datosBono.vencimiento) },
+                    { l: 'Próx. cupón', v: fmtFecha(datosBono.proximoCupon) },
+                    { l: 'Valor cupón', v: datosBono.proximoCuponValor },
+                  ].map(({ l, v }) => (
+                    <div key={l}>
+                      <p className="text-xs text-gray-400">{l}</p>
+                      <p className="text-sm font-semibold text-gray-800">{v ?? '-'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tabla de flujos */}
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <h3 className="font-semibold text-gray-700">Flujos futuros</h3>
+                  <span className="text-xs text-gray-400">en {datosBono.moneda} por cada 100 VN</span>
+                </div>
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      {['Fecha', 'Amortización', 'Interés', 'Total', 't (años)'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {datosBono.flujos.map((f, i) => (
+                      <tr key={i} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-700">{fmtFecha(f.fecha)}</td>
+                        <td className="px-4 py-3 text-sm text-indigo-600">{f.amort?.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-sm text-green-600">{f.interes?.toFixed(4)}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-gray-800">{f.total?.toFixed(4)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-400">{f.t?.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50 border-t border-gray-200">
+                    <tr>
+                      <td className="px-4 py-3 text-xs font-semibold text-gray-500">TOTAL</td>
+                      <td className="px-4 py-3 text-sm font-bold text-indigo-600">
+                        {datosBono.flujos.reduce((s, f) => s + (f.amort || 0), 0).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-green-600">
+                        {datosBono.flujos.reduce((s, f) => s + (f.interes || 0), 0).toFixed(4)}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-bold text-gray-800">
+                        {datosBono.flujos.reduce((s, f) => s + (f.total || 0), 0).toFixed(4)}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </>
+          )}
+
+          {!datosBono && !cargandoFlujos && (
+            <div className="bg-white rounded-xl border border-gray-100 p-16 text-center text-gray-400">
+              Seleccioná un instrumento para ver sus flujos
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

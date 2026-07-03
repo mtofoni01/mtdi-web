@@ -7,6 +7,7 @@ const navItems = [
   { to: '/cartera',             label: '📈 Mi cartera',           always: true },
   { to: '/watchlist',           label: '👁️ Watchlist',             always: true },
   { to: '/curva-rendimientos',  label: '📉 Curva de Rendimientos', always: true },
+  { to: '/calculadora-tir',    label: '🧮 Calculadora TIR',       always: true },
   { to: '/depositos',           label: '🏦 Depósitos',             always: true },
   { to: '/saldo',               label: '💰 Mi saldo',              always: true },
   { to: '/documentos',          label: '📄 Documentos',            always: true },

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Cartera from './pages/Cartera'
 import Watchlist from './pages/Watchlist'
 import CurvaRendimientos from './pages/CurvaRendimientos'
+import CalculadoraTIR from './pages/CalculadoraTIR'
 import Depositos from './pages/Depositos'
 import Saldo from './pages/Saldo'
 import Documentos from './pages/Documentos'
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="cartera"             element={<Cartera />} />
             <Route path="watchlist"           element={<Watchlist />} />
             <Route path="curva-rendimientos"  element={<CurvaRendimientos />} />
+            <Route path="calculadora-tir"    element={<CalculadoraTIR />} />
             <Route path="depositos"           element={<Depositos />} />
             <Route path="saldo"               element={<Saldo />} />
             <Route path="documentos"          element={<Documentos />} />
