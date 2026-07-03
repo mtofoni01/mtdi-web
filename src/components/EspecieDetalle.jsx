@@ -98,7 +98,7 @@ export default function EspecieDetalle({ ticker, datosBasicos, onCerrar }) {
 
   // Datos para los gráficos
   const grafPrecios = historial.map(p => ({
-    fecha:  new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }),
+    fecha:  new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }),
     ars:    parseFloat(p.precio_cierre_ars || 0),
     usd:    parseFloat(p.precio_cierre_usd || 0),
   }))
@@ -106,7 +106,7 @@ export default function EspecieDetalle({ ticker, datosBasicos, onCerrar }) {
   const grafVolumen = historial
     .filter(p => p.volumen_operado)
     .map(p => ({
-      fecha:   new Date(p.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }),
+      fecha:   new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }),
       volumen: parseFloat(p.volumen_operado || 0),
     }))
 
@@ -286,7 +286,7 @@ export default function EspecieDetalle({ ticker, datosBasicos, onCerrar }) {
               <div className="space-y-1 max-h-48 overflow-y-auto">
                 {[...historial].reverse().slice(0, 15).map((p, i) => (
                   <div key={i} className="flex justify-between text-xs text-gray-500 py-1 border-b border-gray-50">
-                    <span>{new Date(p.fecha).toLocaleDateString('es-AR')}</span>
+                    <span>{new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
                     <span className="font-semibold">${fmt(p.precio_cierre_ars)}</span>
                     <span className="text-indigo-500">USD {parseFloat(p.precio_cierre_usd || 0).toFixed(2)}</span>
                     {p.tir && <span style={{ color: '#b5700a' }}>{parseFloat(p.tir).toFixed(2)}%</span>}
