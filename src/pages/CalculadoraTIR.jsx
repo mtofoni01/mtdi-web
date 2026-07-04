@@ -91,13 +91,7 @@ export default function CalculadoraTIR() {
       const data = await res.json()
       if (!data.ok) throw new Error(data.error)
       setDatosBono(data)
-
-      // Verificar si tiene posición para poder guardar
-      try {
-        const res2  = await authFetch(`/api/cartera/posiciones/${tk}`)
-        const data2 = await res2.json()
-        setTienePosicion(!!(data2.ok && data2.data?.posicion))
-      } catch { setTienePosicion(false) }
+      setTienePosicion(true)  // siempre permitimos intentar guardar; el backend valida
 
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message })
