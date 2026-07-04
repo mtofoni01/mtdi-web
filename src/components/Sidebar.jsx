@@ -5,6 +5,7 @@ const AZUL = '#4F6EF7'
 
 const navItems = [
   { to: '/cartera',             label: '📈 Mi cartera',           always: true },
+  { to: '/movimientos',         label: '🔄 Movimientos',           always: true },
   { to: '/watchlist',           label: '👁️ Watchlist',             always: true },
   { to: '/curva-rendimientos',  label: '📉 Curva de Rendimientos', always: true },
   { to: '/calculadora-tir',    label: '🧮 Calculadora TIR',       always: true },

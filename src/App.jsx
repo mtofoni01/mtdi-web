@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Cartera from './pages/Cartera'
+import Movimientos from './pages/Movimientos'
 import Watchlist from './pages/Watchlist'
 import CurvaRendimientos from './pages/CurvaRendimientos'
 import CalculadoraTIR from './pages/CalculadoraTIR'
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/cartera" replace />} />
             <Route path="cartera"             element={<Cartera />} />
+            <Route path="movimientos"         element={<Movimientos />} />
             <Route path="watchlist"           element={<Watchlist />} />
             <Route path="curva-rendimientos"  element={<CurvaRendimientos />} />
             <Route path="calculadora-tir"    element={<CalculadoraTIR />} />
