@@ -458,7 +458,8 @@ export default function Cartera() {
                     <Th col="valuacion_ars"      label="Val. ARS" />
                     <Th col="valuacion_usd"      label="Val. USD" />
                     <Th col="resultado_pct"      label="Result. %" />
-                    <Th col="tir"                label="TIR" />
+                    <Th col="tir"                label="TIR Mdo" />
+                    <Th col="tir_compra"         label="TIR Compra" />
                     <Th col="duration"           label="MD" />
                     <Th col="volumen_operado"    label="Volumen" />
                     <Th col="custodio_nombre"    label="Custodio" />
@@ -489,6 +490,36 @@ export default function Cartera() {
                         </td>
                         <td className="px-4 py-3 text-sm" style={{ color: '#b5700a' }}>
                           {item.tir ? `${parseFloat(item.tir).toFixed(2)}%` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          {item.tir_compra ? (() => {
+                            const tirC = parseFloat(item.tir_compra)
+                            const tirM = item.tir ? parseFloat(item.tir) : null
+                            // Señal: TIR mercado < TIR compra → precio subió → oportunidad de venta
+                            const oportunidad = tirM !== null && tirM < tirC
+                            const dif = tirM !== null ? (tirM - tirC).toFixed(2) : null
+                            return (
+                              <div className="flex items-center gap-1">
+                                <span style={{ color: '#8e44ad' }} className="font-semibold">
+                                  {tirC.toFixed(2)}%
+                                </span>
+                                {dif !== null && (
+                                  <span
+                                    className="text-xs px-1.5 py-0.5 rounded-full"
+                                    style={{
+                                      backgroundColor: oportunidad ? '#d4edda' : '#f8d7da',
+                                      color: oportunidad ? '#155724' : '#721c24',
+                                    }}
+                                    title={oportunidad
+                                      ? 'TIR mercado bajó → precio subió → oportunidad de venta con ganancia'
+                                      : 'TIR mercado subió → precio bajó'}
+                                  >
+                                    {oportunidad ? '↑💰' : '↓'} {dif > 0 ? '+' : ''}{dif}
+                                  </span>
+                                )}
+                              </div>
+                            )
+                          })() : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="px-4 py-3 text-sm" style={{ color: '#b5700a' }}>
                           {item.duration ? parseFloat(item.duration).toFixed(2) : '-'}
