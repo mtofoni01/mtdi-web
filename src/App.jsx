@@ -9,6 +9,7 @@ import Watchlist from './pages/Watchlist'
 import CurvaRendimientos from './pages/CurvaRendimientos'
 import CalculadoraTIR from './pages/CalculadoraTIR'
 import Depositos from './pages/Depositos'
+import MovimientosCaja from './pages/MovimientosCaja'
 import Saldo from './pages/Saldo'
 import Documentos from './pages/Documentos'
 import Gastos from './pages/Gastos'
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="curva-rendimientos"  element={<CurvaRendimientos />} />
             <Route path="calculadora-tir"    element={<CalculadoraTIR />} />
             <Route path="depositos"           element={<Depositos />} />
+            <Route path="caja"                element={<MovimientosCaja />} />
             <Route path="saldo"               element={<Saldo />} />
             <Route path="documentos"          element={<Documentos />} />
             <Route path="gastos"              element={<Gastos />} />
