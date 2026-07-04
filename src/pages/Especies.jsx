@@ -41,6 +41,7 @@ export default function Especies() {
     ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: ''
   })
   const [agregando, setAgregando] = useState(false)
+  const [importando, setImportando] = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -69,6 +70,23 @@ export default function Especies() {
     setEditando(null)
     setForm({})
     setMensaje(null)
+  }
+
+  const importarComafi = async () => {
+    if (!confirm('¿Importar todas las especies de Comafi que no existan todavía? El tipo se asignará provisoriamente por moneda y podrás ajustarlo después.')) return
+    setImportando(true)
+    setMensaje(null)
+    try {
+      const res  = await authFetch('/api/cartera/especies/importar-comafi', { method: 'POST' })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Error al importar')
+      setMensaje({ tipo: 'ok', texto: data.mensaje || `${data.importados} especies importadas` })
+      cargar()
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
+    } finally {
+      setImportando(false)
+    }
   }
 
   const guardar = async (ticker) => {
@@ -144,7 +162,17 @@ export default function Especies() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">🏷️ Especies</h1>
-        <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        <div className="flex gap-3">
+          <button
+            onClick={importarComafi}
+            disabled={importando}
+            className="px-4 py-2 text-sm text-white rounded-lg disabled:opacity-60"
+            style={{ backgroundColor: '#16a085' }}
+          >
+            {importando ? 'Importando...' : '⬇️ Importar desde Comafi'}
+          </button>
+          <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        </div>
       </div>
 
       {/* Mensaje global */}
