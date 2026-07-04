@@ -35,6 +35,23 @@ function fmtFecha(f) {
   return `${d}/${m}/${y}`
 }
 
+// Calcula el tiempo en años (t) desde hoy hasta una fecha DD/MM/YYYY
+function calcularT(fechaStr) {
+  if (!fechaStr) return null
+  let dd, mm, yyyy
+  if (fechaStr.includes('/')) {
+    [dd, mm, yyyy] = fechaStr.split('/')
+  } else if (fechaStr.includes('-')) {
+    [yyyy, mm, dd] = fechaStr.split('-')
+  } else {
+    return null
+  }
+  const fecha = new Date(`${yyyy}-${mm}-${dd}T12:00:00`)
+  const hoy   = new Date()
+  const dias  = (fecha - hoy) / (1000 * 60 * 60 * 24)
+  return dias / 365
+}
+
 export default function CalculadoraTIR() {
   const { authFetch } = useAuth()
   const [especies, setEspecies]     = useState([])
@@ -102,12 +119,17 @@ export default function CalculadoraTIR() {
     const p = parseFloat(precio)
     if (isNaN(p) || p <= 0) return
 
+    // Para cada flujo, usar el t de Comafi si existe; si no, calcularlo desde la fecha
     const flujos = datosBono.flujos
+      .map(f => ({
+        t:     (f.t !== null && f.t > 0) ? f.t : calcularT(f.fecha),
+        total: f.total,
+      }))
       .filter(f => f.t !== null && f.t > 0)
-      .map(f => ({ t: f.t, total: f.total }))
 
     const tir = calcularTIR(flujos, p)
     setTirCompra(tir)
+    setMensaje(null)
   }
 
   // Guardar TIR de compra en posición
