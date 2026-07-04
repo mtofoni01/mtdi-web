@@ -53,7 +53,7 @@ function calcularT(fechaStr) {
 }
 
 export default function CalculadoraTIR() {
-  const { authFetch } = useAuth()
+  const { authFetch, token } = useAuth()
   const [especies, setEspecies]     = useState([])
   const [busqueda, setBusqueda]     = useState('')
   const [ticker, setTicker]         = useState('')
@@ -149,6 +149,33 @@ export default function CalculadoraTIR() {
       setMensaje({ tipo: 'error', texto: e.message })
     } finally {
       setGuardando(false)
+    }
+  }
+
+  // Descargar Excel de flujos
+  const descargarExcel = async () => {
+    if (!ticker) return
+    try {
+      const params = new URLSearchParams()
+      if (precio)          params.set('precio', precio)
+      if (tirCompra !== null) params.set('tir', tirCompra.toFixed(4))
+
+      const url = `https://backend-login-production-6dd0.up.railway.app/api/cartera/flujos/${ticker}/excel?${params}`
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Error al generar el Excel')
+
+      const blob = await res.blob()
+      const link = document.createElement('a')
+      link.href = window.URL.createObjectURL(blob)
+      link.download = `flujos_${ticker}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(link.href)
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
     }
   }
 
@@ -328,7 +355,16 @@ export default function CalculadoraTIR() {
               <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
                   <h3 className="font-semibold text-gray-700">Flujos futuros</h3>
-                  <span className="text-xs text-gray-400">en {datosBono.moneda} por cada 100 VN</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">en {datosBono.moneda} por cada 100 VN</span>
+                    <button
+                      onClick={descargarExcel}
+                      className="px-3 py-1.5 text-xs text-white rounded-lg"
+                      style={{ backgroundColor: '#16a085' }}
+                    >
+                      📊 Exportar Excel
+                    </button>
+                  </div>
                 </div>
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-100">
