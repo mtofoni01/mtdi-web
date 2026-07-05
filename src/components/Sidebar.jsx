@@ -12,6 +12,7 @@ const navItems = [
   { to: '/calculadora-tir',    label: '🧮 Calculadora TIR',       always: true },
   { to: '/depositos',           label: '🏦 Depósitos',             always: true },
   { to: '/caja',                label: '💵 Movimientos de Caja',   always: true },
+  { to: '/fci',                 label: '📊 FCI',                   always: true },
   { to: '/saldo',               label: '💰 Mi saldo',              always: true },
   { to: '/documentos',          label: '📄 Documentos',            always: true },
   { to: '/gastos',              label: '💸 Gastos',                always: true },
