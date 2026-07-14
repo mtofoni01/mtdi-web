@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 export default function Documentos() {
   const { authFetch, usuario, token } = useAuth()
+  const navigate = useNavigate()
   const [documentos, setDocumentos]   = useState([])
   const [cargando, setCargando]       = useState(true)
   const [busqueda, setBusqueda]       = useState('')
@@ -55,6 +57,11 @@ export default function Documentos() {
       cargar()
       if (seleccionado?.id === id) setSeleccionado(null)
     } catch {}
+  }
+
+  // Navega a Gastos con los datos del documento precargados
+  const imputarComoGasto = (doc) => {
+    navigate('/gastos', { state: { desdeDocumento: doc } })
   }
 
   const TIPOS = ['Todos', 'Factura A', 'Factura B', 'Factura C', 'Remito', 'Nota de pedido', 'Presupuesto', 'Recibo', 'Contrato', 'Otro']
@@ -174,6 +181,15 @@ export default function Documentos() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Imputar como gasto (solo admin) */}
+            {usuario?.rol === 'admin' && (
+              <button onClick={() => imputarComoGasto(seleccionado)}
+                className="w-full py-2 text-sm text-white rounded-lg font-semibold mt-2"
+                style={{ backgroundColor: '#d35400' }}>
+                💸 Imputar como gasto
+              </button>
             )}
 
             {seleccionado.imagen_url && (
