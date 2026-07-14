@@ -335,6 +335,13 @@ export default function Cartera() {
   const [ejecutando, setEjecutando] = useState(false)
   const [estadoCierre, setEstadoCierre] = useState('')
   const [mostrarInformes, setMostrarInformes] = useState(false)
+  const [dolar, setDolar] = useState(null)
+
+  // Nombres amigables de tipos de dólar
+  const NOMBRE_DOLAR = {
+    blue: 'Blue', bolsa: 'MEP', oficial: 'Oficial',
+    contadoconliqui: 'CCL', mayorista: 'Mayorista', cripto: 'Cripto',
+  }
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -351,6 +358,13 @@ export default function Cartera() {
         if (p.valuacion_usd) totalUSD += parseFloat(p.valuacion_usd)
       })
       setResumen({ totalARS, totalUSD, cantidad: items.length })
+
+      // Cargar el TC de valuación
+      try {
+        const rD = await authFetch('/api/cartera/dolar')
+        const dD = await rD.json()
+        if (dD.ok && dD.data) setDolar(dD.data)
+      } catch {}
     } catch {}
     finally { setCargando(false) }
   }, [authFetch, usuario])
@@ -476,6 +490,12 @@ export default function Cartera() {
           <div className="bg-indigo-500 rounded-xl p-5 text-white">
             <p className="text-indigo-200 text-sm">Valuación USD</p>
             <p className="text-2xl font-bold mt-1">USD {fmt(resumen.totalUSD)}</p>
+            {dolar && (
+              <p className="text-indigo-200 text-xs mt-2 pt-2 border-t border-indigo-400">
+                TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo}: ${fmt(dolar.valor, 2)}
+                <span className="opacity-70"> · {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+              </p>
+            )}
           </div>
           <div className="bg-white rounded-xl p-5 border border-gray-100">
             <p className="text-gray-400 text-sm">Especies en cartera</p>

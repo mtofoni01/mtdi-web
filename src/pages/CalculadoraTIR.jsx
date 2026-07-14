@@ -65,6 +65,34 @@ export default function CalculadoraTIR() {
   const [guardando, setGuardando]   = useState(false)
   const [mensaje, setMensaje]       = useState(null)
   const [tienePosicion, setTienePosicion] = useState(false)
+  const [dolar, setDolar] = useState(null)
+  const [convArs, setConvArs] = useState('')
+  const [convUsd, setConvUsd] = useState('')
+
+  const NOMBRE_DOLAR = {
+    blue: 'Blue', bolsa: 'MEP', oficial: 'Oficial',
+    contadoconliqui: 'CCL', mayorista: 'Mayorista', cripto: 'Cripto',
+  }
+
+  // Cargar el TC de valuación
+  useEffect(() => {
+    authFetch('/api/cartera/dolar')
+      .then(r => r.json())
+      .then(d => { if (d.ok && d.data) setDolar(d.data) })
+      .catch(() => {})
+  }, [authFetch])
+
+  // Conversores (usan el TC vigente)
+  const onArs = (v) => {
+    setConvArs(v)
+    if (dolar?.valor && v) setConvUsd((parseFloat(v) / dolar.valor).toFixed(2))
+    else setConvUsd('')
+  }
+  const onUsd = (v) => {
+    setConvUsd(v)
+    if (dolar?.valor && v) setConvArs((parseFloat(v) * dolar.valor).toFixed(2))
+    else setConvArs('')
+  }
 
   // Cargar lista de especies Comafi
   const cargarEspecies = useCallback(async () => {
@@ -186,6 +214,36 @@ export default function CalculadoraTIR() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">🧮 Calculadora TIR</h1>
+
+      {/* TC de valuación + conversor rápido */}
+      {dolar && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase">TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo}</span>
+            <span className="text-lg font-bold text-indigo-600">${parseFloat(dolar.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-xs text-gray-400">
+              {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}
+            </span>
+          </div>
+          <div className="h-6 w-px bg-gray-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Convertir:</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-400">ARS</span>
+              <input type="number" value={convArs} onChange={e => onArs(e.target.value)}
+                placeholder="0" step="any"
+                className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+            <span className="text-gray-300">⇄</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-400">USD</span>
+              <input type="number" value={convUsd} onChange={e => onUsd(e.target.value)}
+                placeholder="0" step="any"
+                className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {mensaje && (
         <div className={`px-4 py-3 rounded-lg text-sm border ${mensaje.tipo === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
