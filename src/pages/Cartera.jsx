@@ -333,6 +333,7 @@ export default function Cartera() {
   const [sortDir, setSortDir]       = useState('asc')
   const [seleccionado, setSeleccionado] = useState(null)
   const [ejecutando, setEjecutando] = useState(false)
+  const [estadoCierre, setEstadoCierre] = useState('')
   const [mostrarInformes, setMostrarInformes] = useState(false)
 
   const cargar = useCallback(async () => {
@@ -375,11 +376,57 @@ export default function Cartera() {
 
   const ejecutarCierres = async () => {
     setEjecutando(true)
+    setEstadoCierre('Iniciando actualización...')
     try {
-      await authFetch('/api/cartera/ejecutar-cierres', { method: 'POST' })
-      await cargar()
-    } catch {}
-    setEjecutando(false)
+      const res  = await authFetch('/api/cartera/ejecutar-cierres', { method: 'POST' })
+      const data = await res.json()
+
+      if (!data.ok) {
+        setEstadoCierre('Error al iniciar')
+        setEjecutando(false)
+        return
+      }
+
+      // Polling del estado cada 4 segundos
+      setEstadoCierre('Actualizando precios en segundo plano...')
+      const intervalo = setInterval(async () => {
+        try {
+          const rEst = await authFetch('/api/cartera/estado-cierres')
+          const est  = await rEst.json()
+
+          if (est.status === 'done') {
+            clearInterval(intervalo)
+            const ins = est.resultado?.insertados ?? 0
+            setEstadoCierre(`✓ Listo: ${ins} precios actualizados`)
+            await cargar()
+            setEjecutando(false)
+            setTimeout(() => setEstadoCierre(''), 5000)
+          } else if (est.status === 'error') {
+            clearInterval(intervalo)
+            setEstadoCierre(`Error: ${est.error || 'desconocido'}`)
+            setEjecutando(false)
+          } else if (est.status === 'running') {
+            setEstadoCierre('Actualizando precios... (puede tardar ~1 min)')
+          }
+        } catch {
+          // Si falla una consulta puntual, seguimos intentando
+        }
+      }, 4000)
+
+      // Corte de seguridad a los 3 minutos
+      setTimeout(() => {
+        clearInterval(intervalo)
+        if (ejecutando) {
+          setEjecutando(false)
+          setEstadoCierre('')
+          cargar()
+        }
+      }, 180000)
+
+    } catch {
+      setEstadoCierre('Error de conexión')
+      setEjecutando(false)
+    }
   }
 
   const Th = ({ col, label }) => (
@@ -405,11 +452,16 @@ export default function Cartera() {
             ↻ Actualizar
           </button>
           {usuario?.rol === 'admin' && (
-            <button onClick={ejecutarCierres} disabled={ejecutando}
-              className="px-4 py-2 text-sm text-white rounded-lg disabled:opacity-60"
-              style={{ backgroundColor: '#28a745' }}>
-              {ejecutando ? 'Actualizando...' : '🔄 Actualizar precios'}
-            </button>
+            <div className="flex items-center gap-2">
+              {estadoCierre && (
+                <span className="text-xs text-gray-500 max-w-xs">{estadoCierre}</span>
+              )}
+              <button onClick={ejecutarCierres} disabled={ejecutando}
+                className="px-4 py-2 text-sm text-white rounded-lg disabled:opacity-60"
+                style={{ backgroundColor: '#28a745' }}>
+                {ejecutando ? 'Actualizando...' : '🔄 Actualizar precios'}
+              </button>
+            </div>
           )}
         </div>
       </div>
