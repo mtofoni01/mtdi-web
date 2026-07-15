@@ -1,7 +1,7 @@
 // pages/Reportes.jsx
 import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 function fmt(n, dec = 2) {
   return parseFloat(n || 0).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
@@ -49,6 +49,8 @@ export default function Reportes() {
   const [usuarios, setUsuarios]   = useState([])
   const [custodios, setCustodios] = useState([])
   const [cargando, setCargando]   = useState(true)
+  const [fechaCierre, setFechaCierre] = useState(null)
+  const [tc, setTc]               = useState(null)
 
   const [fUsuarios, setFUsuarios]   = useState([])
   const [fCustodios, setFCustodios] = useState([])
@@ -69,6 +71,8 @@ export default function Reportes() {
       const dCust = await rCust.json()
       setItems(dRep.data || [])
       setCustodios(dCust.data || [])
+      setFechaCierre(dRep.fecha_cierre || null)
+      setTc(dRep.tc || null)
 
       if (esAdmin) {
         const rU = await authFetch('/api/admin/usuarios')
@@ -134,6 +138,25 @@ export default function Reportes() {
   const toggle = (arr, setArr, id) => setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id])
   const hayFiltros = fUsuarios.length || fCustodios.length
 
+  // Leyenda de texto con porcentajes (para que siempre salga, también en PDF)
+  const Leyenda = ({ data }) => {
+    const total = data.reduce((s, d) => s + d.value, 0)
+    if (total === 0) return null
+    return (
+      <div className="mt-2 space-y-0.5">
+        {data.map((d, i) => (
+          <div key={d.name} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLORES[i % COLORES.length] }} />
+              <span className="text-gray-600">{d.name}</span>
+            </span>
+            <span className="text-gray-500 font-medium">{((d.value/total)*100).toFixed(1)}%</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   // Exportar PDF: usa el diálogo de impresión del navegador (Guardar como PDF).
   // Los estilos @media print ocultan todo menos el cuerpo del reporte.
   const exportarPDF = () => { window.print() }
@@ -166,8 +189,8 @@ export default function Reportes() {
       <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_usd)}</td>
       <td className="px-4 py-2 text-sm text-right" style={{ color: '#16a085' }}>{i.tasa ? `${fmt(i.tasa)}%` : '—'}</td>
       <td className="px-4 py-2 text-xs text-right text-gray-500">{fmtMeses(i.plazo_anios)}</td>
-      <td className="px-4 py-2 text-xs text-gray-400">{i.custodio_nombre || '—'}</td>
-      {esAdmin && <td className="px-4 py-2 text-xs text-gray-400">{i.usuario_nombre || '—'}</td>}
+      <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.custodio_nombre || '—'}</td>
+      {esAdmin && <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.usuario_nombre || '—'}</td>}
     </tr>
   )
 
@@ -253,7 +276,11 @@ export default function Reportes() {
           {/* Encabezado solo visible al imprimir */}
           <div className="hidden print:block mb-4">
             <h2 className="text-xl font-bold text-gray-800">Informe de cartera</h2>
-            <p className="text-sm text-gray-500">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
+            <p className="text-sm text-gray-500">
+              Emitido: {new Date().toLocaleDateString('es-AR')}
+              {fechaCierre && ` · Cotizaciones al ${new Date(String(fechaCierre).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}`}
+              {tc && ` · TC ${fmt(tc, 2)}`}
+            </p>
           </div>
           {/* Totales globales */}
           <div className="grid grid-cols-4 gap-4">
@@ -280,41 +307,41 @@ export default function Reportes() {
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <p className="text-sm font-semibold text-gray-600 mb-2">Exposición por moneda</p>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
-                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}
-                    label={e => `${e.name} ${(e.percent*100).toFixed(0)}%`}>
+                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
                     {porMoneda.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
                 </PieChart>
               </ResponsiveContainer>
-              <p className="text-center text-xs text-gray-400">Base USD</p>
+              <Leyenda data={porMoneda} />
+              <p className="text-center text-xs text-gray-400 mt-1">Base USD</p>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <p className="text-sm font-semibold text-gray-600 mb-2">Por instrumento</p>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={180}>
                 <PieChart>
                   <Pie data={porInstrumento} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
                     {porInstrumento.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
                 </PieChart>
               </ResponsiveContainer>
+              <Leyenda data={porInstrumento} />
             </div>
             {mostrarCustodios ? (
               <div className="bg-white rounded-xl border border-gray-100 p-4">
                 <p className="text-sm font-semibold text-gray-600 mb-2">Por custodio</p>
-                <ResponsiveContainer width="100%" height={200}>
+                <ResponsiveContainer width="100%" height={180}>
                   <PieChart>
                     <Pie data={porCustodio} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
                       {porCustodio.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                     </Pie>
                     <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
-                    <Legend wrapperStyle={{ fontSize: 10 }} />
                   </PieChart>
                 </ResponsiveContainer>
+                <Leyenda data={porCustodio} />
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-center text-gray-300 text-sm">
@@ -335,15 +362,15 @@ export default function Reportes() {
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Val. USD</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Tasa</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Plazo</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Custodio</th>
-                    {esAdmin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th>}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase no-print">Custodio</th>
+                    {esAdmin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase no-print">Usuario</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {estructura.map(mon => (
                     <Fragment key={`mon-wrap-${mon.moneda}`}>
                       <tr className="bg-indigo-600 text-white">
-                        <td colSpan={colSpan} className="px-4 py-2 font-bold text-sm">💱 {mon.moneda}</td>
+                        <td colSpan={colSpan} className="px-4 py-2 font-bold text-sm">{mon.moneda}</td>
                       </tr>
                       {mon.grupos.map(g => (
                         <Fragment key={`g-wrap-${mon.moneda}-${g.grupo}`}>
@@ -353,7 +380,7 @@ export default function Reportes() {
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalUsd)}</td>
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.pond.tir)}%</td>
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(meses(g.pond.dur),1)}m</td>
-                            <td colSpan={esAdmin ? 2 : 1}></td>
+                            <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                           </tr>
                           {verDetalle && g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)}
                         </Fragment>
@@ -364,7 +391,7 @@ export default function Reportes() {
                         <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalUsd)}</td>
                         <td className="px-4 py-2 text-right text-sm text-green-600">{fmt(mon.pond.tir)}%</td>
                         <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(meses(mon.pond.dur),1)}m</td>
-                        <td colSpan={esAdmin ? 2 : 1}></td>
+                        <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                       </tr>
                     </Fragment>
                   ))}
@@ -374,7 +401,7 @@ export default function Reportes() {
                     <td className="px-4 py-3 text-right text-sm">USD {fmt(totalUsd)}</td>
                     <td className="px-4 py-3 text-right text-sm text-green-300">{fmt(global.tir)}%</td>
                     <td className="px-4 py-3 text-right text-sm">{fmt(meses(global.dur),1)}m</td>
-                    <td colSpan={esAdmin ? 2 : 1}></td>
+                    <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                   </tr>
                 </tbody>
               </table>
