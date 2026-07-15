@@ -96,14 +96,19 @@ export default function Reportes() {
       .sort((a, b) => b.value - a.value)
   }
 
-  const porMoneda      = useMemo(() => {
-    // Este va sobre TODOS los items (no filtrado por moneda), para ver ARS vs USD
+  const porMoneda = useMemo(() => {
+    // Distribución de exposición por moneda, todo expresado en USD (denominador
+    // común) para que la proporción ARS vs USD sea comparable y real.
     const map = {}
     for (const i of items) {
-      if (parseFloat(i.valuacion_ars || 0) > 0) map['ARS'] = (map['ARS'] || 0) + parseFloat(i.valuacion_ars)
-      if (parseFloat(i.valuacion_usd || 0) > 0) map['USD'] = (map['USD'] || 0) + parseFloat(i.valuacion_usd)
+      const valUsd = parseFloat(i.valuacion_usd || 0)
+      if (valUsd <= 0) continue
+      const mon = i.moneda || 'ARS'
+      map[mon] = (map[mon] || 0) + valUsd
     }
-    return Object.entries(map).map(([name, value]) => ({ name, value: Math.round(value*100)/100 }))
+    return Object.entries(map)
+      .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
+      .sort((a, b) => b.value - a.value)
   }, [items])
 
   const porCustodio    = useMemo(() => agrupar('custodio_nombre'), [itemsMoneda, valKey])
@@ -207,17 +212,19 @@ export default function Reportes() {
 
           {/* Gráficos */}
           <div className="grid grid-cols-3 gap-6">
-            {/* Por moneda */}
+            {/* Por moneda: exposición real, expresada en USD */}
             <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <p className="text-sm font-semibold text-gray-600 mb-2">Por moneda</p>
+              <p className="text-sm font-semibold text-gray-600 mb-2">Exposición por moneda</p>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={e => e.name}>
+                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}
+                    label={e => `${e.name} ${(e.percent * 100).toFixed(0)}%`}>
                     {porMoneda.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} />
+                  <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
                 </PieChart>
               </ResponsiveContainer>
+              <p className="text-center text-xs text-gray-400">Instrumentos según su moneda de origen (base USD)</p>
             </div>
 
             {/* Por instrumento */}
