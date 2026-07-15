@@ -42,7 +42,7 @@ function ponderar(items) {
 }
 
 export default function Reportes() {
-  const { authFetch, usuario } = useAuth()
+  const { authFetch, usuario, token } = useAuth()
   const esAdmin = usuario?.rol === 'admin'
 
   const [items, setItems]         = useState([])
@@ -52,6 +52,7 @@ export default function Reportes() {
 
   const [fUsuarios, setFUsuarios]   = useState([])
   const [fCustodios, setFCustodios] = useState([])
+  const [verDetalle, setVerDetalle] = useState(true)  // toggle detalle por especie
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -133,6 +134,30 @@ export default function Reportes() {
   const toggle = (arr, setArr, id) => setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id])
   const hayFiltros = fUsuarios.length || fCustodios.length
 
+  // Exportar PDF: usa el diálogo de impresión del navegador (Guardar como PDF).
+  // Los estilos @media print ocultan todo menos el cuerpo del reporte.
+  const exportarPDF = () => { window.print() }
+
+  // Exportar Excel: descarga el .xlsx del backend (sin filtros, tabla plana)
+  const exportarExcel = async () => {
+    try {
+      const base = 'https://backend-login-production-6dd0.up.railway.app'
+      const res = await fetch(`${base}/api/cartera/reporte/excel`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `reporte_cartera_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {}
+  }
+
   const Fila = ({ i }) => (
     <tr className="hover:bg-gray-50">
       <td className="px-4 py-2 pl-8 text-sm font-semibold text-gray-700">{i.ticker}</td>
@@ -150,13 +175,43 @@ export default function Reportes() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <style>{`
+        @media print {
+          /* Ocultar todo lo que no sea el reporte */
+          body * { visibility: hidden; }
+          #reporte-imprimible, #reporte-imprimible * { visibility: visible; }
+          #reporte-imprimible { position: absolute; left: 0; top: 0; width: 100%; }
+          .no-print { display: none !important; }
+          /* Evitar cortes feos dentro de tablas y tarjetas */
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; }
+          .rounded-xl { break-inside: avoid; }
+          @page { margin: 1cm; size: landscape; }
+        }
+      `}</style>
+      <div className="flex items-center justify-between no-print">
         <h1 className="text-2xl font-bold text-gray-800">📊 Reporte de cartera</h1>
-        <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻ Actualizar</button>
+        <div className="flex gap-2 no-print">
+          <button onClick={() => setVerDetalle(v => !v)}
+            className={`px-4 py-2 text-sm rounded-lg border transition-colors ${verDetalle ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+            {verDetalle ? '📖 Detalle por especie' : '📕 Solo subtotales'}
+          </button>
+          <button onClick={exportarPDF}
+            className="px-4 py-2 text-sm rounded-lg text-white" style={{ backgroundColor: '#c0392b' }}>
+            📄 PDF
+          </button>
+          {esAdmin && (
+            <button onClick={exportarExcel}
+              className="px-4 py-2 text-sm rounded-lg text-white" style={{ backgroundColor: '#16a085' }}>
+              📊 Excel
+            </button>
+          )}
+          <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻ Actualizar</button>
+        </div>
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3 no-print">
         <div>
           <label className="text-xs text-gray-500 block mb-1">Custodios {fCustodios.length > 0 && `(${fCustodios.length})`}</label>
           <div className="flex flex-wrap gap-2">
@@ -194,7 +249,12 @@ export default function Reportes() {
           No hay tenencias {hayFiltros ? 'con estos filtros' : ''}
         </div>
       ) : (
-        <>
+        <div id="reporte-imprimible">
+          {/* Encabezado solo visible al imprimir */}
+          <div className="hidden print:block mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Informe de cartera</h2>
+            <p className="text-sm text-gray-500">Fecha: {new Date().toLocaleDateString('es-AR')}</p>
+          </div>
           {/* Totales globales */}
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-indigo-600 rounded-xl p-5 text-white">
@@ -295,7 +355,7 @@ export default function Reportes() {
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(meses(g.pond.dur),1)}m</td>
                             <td colSpan={esAdmin ? 2 : 1}></td>
                           </tr>
-                          {g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)}
+                          {verDetalle && g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)}
                         </Fragment>
                       ))}
                       <tr className="bg-indigo-50 border-y border-indigo-100 font-semibold">
@@ -323,7 +383,7 @@ export default function Reportes() {
               {items.length} tenencia(s) · Ponderaciones sobre base común USD (estables, no dependen de la moneda)
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   )
