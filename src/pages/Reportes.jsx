@@ -1,5 +1,5 @@
 // pages/Reportes.jsx
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 
@@ -7,15 +7,38 @@ function fmt(n, dec = 2) {
   return parseFloat(n || 0).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 }
 
-// Paleta para los gráficos
 const COLORES = ['#4F6EF7', '#16a085', '#8e44ad', '#e67e22', '#c0392b', '#2980b9', '#27ae60', '#d35400', '#7f8c8d', '#f39c12']
 
-function plazoLegible(anios) {
-  if (!anios || anios <= 0) return '0 d'
-  const dias = anios * 365
-  if (dias < 60) return `${Math.round(dias)} d`
-  if (anios < 2) return `${(dias/30).toFixed(1)} m`
-  return `${anios.toFixed(2)} a`
+function meses(anios) {
+  return (parseFloat(anios || 0) * 12)
+}
+function fmtMeses(anios) {
+  const m = meses(anios)
+  if (m < 0.5) return `${Math.round(anios * 365)} d`
+  return `${m.toFixed(1)} m`
+}
+
+// Orden de liquidez: más líquido primero
+const ORDEN_GRUPO = {
+  'Depósitos a la vista': 1,
+  'Plazos fijos': 2,
+  'Cauciones': 3,
+  'FCI': 4,
+  'Renta fija': 5,
+  'Renta variable': 6,
+}
+
+// Pondera tasa y plazo sobre base_usd (denominador común y estable)
+function ponderar(items) {
+  const base = items.reduce((s, i) => s + parseFloat(i.base_usd || 0), 0)
+  if (base === 0) return { tir: 0, dur: 0, base: 0 }
+  let tir = 0, dur = 0
+  for (const i of items) {
+    const peso = parseFloat(i.base_usd || 0) / base
+    tir += parseFloat(i.tasa || 0) * peso
+    dur += parseFloat(i.plazo_anios || 0) * peso
+  }
+  return { tir, dur, base }
 }
 
 export default function Reportes() {
@@ -27,11 +50,8 @@ export default function Reportes() {
   const [custodios, setCustodios] = useState([])
   const [cargando, setCargando]   = useState(true)
 
-  // Filtros (arrays de ids seleccionados; vacío = todos)
   const [fUsuarios, setFUsuarios]   = useState([])
   const [fCustodios, setFCustodios] = useState([])
-  // Moneda de análisis para los gráficos y ponderaciones
-  const [moneda, setMoneda] = useState('ARS')
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -60,68 +80,73 @@ export default function Reportes() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  // Campo de valuación según moneda elegida
-  const valKey = moneda === 'USD' ? 'valuacion_usd' : 'valuacion_ars'
+  const global = useMemo(() => ponderar(items), [items])
+  const totalArs = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0), [items])
+  const totalUsd = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0), [items])
 
-  // Solo items con valuación en la moneda elegida
-  const itemsMoneda = useMemo(
-    () => items.filter(i => parseFloat(i[valKey] || 0) > 0),
-    [items, valKey]
-  )
-
-  // ── Totales y ponderaciones ──
-  const resumen = useMemo(() => {
-    const total = itemsMoneda.reduce((s, i) => s + parseFloat(i[valKey] || 0), 0)
-    if (total === 0) return { total: 0, tirPond: 0, durPond: 0, cantidad: 0 }
-
-    let tirPond = 0, durPond = 0
-    for (const i of itemsMoneda) {
-      const val = parseFloat(i[valKey] || 0)
-      const peso = val / total
-      tirPond += (parseFloat(i.tasa || 0)) * peso
-      durPond += (parseFloat(i.plazo_anios || 0)) * peso
-    }
-    return { total, tirPond, durPond, cantidad: itemsMoneda.length }
-  }, [itemsMoneda, valKey])
-
-  // ── Agrupaciones para gráficos ──
-  const agrupar = (campo) => {
-    const map = {}
-    for (const i of itemsMoneda) {
-      const k = i[campo] || 'Sin asignar'
-      map[k] = (map[k] || 0) + parseFloat(i[valKey] || 0)
-    }
-    return Object.entries(map)
-      .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
-      .sort((a, b) => b.value - a.value)
-  }
-
-  const porMoneda = useMemo(() => {
-    // Distribución de exposición por moneda, todo expresado en USD (denominador
-    // común) para que la proporción ARS vs USD sea comparable y real.
-    const map = {}
+  // Estructura jerárquica: moneda → grupo de instrumento
+  const estructura = useMemo(() => {
+    const monedas = {}
     for (const i of items) {
-      const valUsd = parseFloat(i.valuacion_usd || 0)
-      if (valUsd <= 0) continue
       const mon = i.moneda || 'ARS'
-      map[mon] = (map[mon] || 0) + valUsd
+      if (!monedas[mon]) monedas[mon] = {}
+      const g = i.grupo || 'Otros'
+      if (!monedas[mon][g]) monedas[mon][g] = []
+      monedas[mon][g].push(i)
     }
-    return Object.entries(map)
-      .map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 }))
-      .sort((a, b) => b.value - a.value)
+    const resultado = []
+    for (const mon of Object.keys(monedas).sort()) {
+      const grupos = Object.entries(monedas[mon])
+        .sort((a, b) => (ORDEN_GRUPO[a[0]] || 99) - (ORDEN_GRUPO[b[0]] || 99))
+        .map(([grupo, its]) => ({
+          grupo,
+          items: its.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
+          pond: ponderar(its),
+          totalArs: its.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
+          totalUsd: its.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
+        }))
+      const itemsMon = items.filter(i => (i.moneda || 'ARS') === mon)
+      resultado.push({
+        moneda: mon,
+        grupos,
+        pond: ponderar(itemsMon),
+        totalArs: itemsMon.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
+        totalUsd: itemsMon.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
+      })
+    }
+    return resultado
   }, [items])
 
-  const porCustodio    = useMemo(() => agrupar('custodio_nombre'), [itemsMoneda, valKey])
-  const porInstrumento = useMemo(() => agrupar('grupo'), [itemsMoneda, valKey])
-
-  // ¿Mostrar desglose por custodio? No si hay un solo custodio seleccionado
+  const agrupar = (campo) => {
+    const map = {}
+    for (const i of items) {
+      const k = i[campo] || 'Sin asignar'
+      map[k] = (map[k] || 0) + parseFloat(i.base_usd || 0)
+    }
+    return Object.entries(map).map(([name, value]) => ({ name, value: Math.round(value*100)/100 })).sort((a,b)=>b.value-a.value)
+  }
+  const porMoneda      = useMemo(() => agrupar('moneda'), [items])
+  const porInstrumento = useMemo(() => agrupar('grupo'), [items])
+  const porCustodio    = useMemo(() => agrupar('custodio_nombre'), [items])
   const mostrarCustodios = fCustodios.length !== 1 && porCustodio.length > 1
 
-  const toggle = (arr, setArr, id) => {
-    setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id])
-  }
-
+  const toggle = (arr, setArr, id) => setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id])
   const hayFiltros = fUsuarios.length || fCustodios.length
+
+  const Fila = ({ i }) => (
+    <tr className="hover:bg-gray-50">
+      <td className="px-4 py-2 pl-8 text-sm font-semibold text-gray-700">{i.ticker}</td>
+      <td className="px-4 py-2 text-xs text-gray-400">{i.descripcion?.slice(0, 28)}</td>
+      <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_ars)}</td>
+      <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_usd)}</td>
+      <td className="px-4 py-2 text-sm text-right" style={{ color: '#16a085' }}>{i.tasa ? `${fmt(i.tasa)}%` : '—'}</td>
+      <td className="px-4 py-2 text-xs text-right text-gray-500">{fmtMeses(i.plazo_anios)}</td>
+      <td className="px-4 py-2 text-xs text-gray-400">{i.custodio_nombre || '—'}</td>
+      {esAdmin && <td className="px-4 py-2 text-xs text-gray-400">{i.usuario_nombre || '—'}</td>}
+    </tr>
+  )
+
+  const colSpan = esAdmin ? 8 : 7
 
   return (
     <div className="space-y-6">
@@ -132,35 +157,17 @@ export default function Reportes() {
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
-        <div className="flex flex-wrap gap-4 items-start">
-          {/* Moneda de análisis */}
-          <div>
-            <label className="text-xs text-gray-500 block mb-1">Moneda de análisis</label>
-            <div className="flex gap-2">
-              {['ARS', 'USD'].map(m => (
-                <button key={m} onClick={() => setMoneda(m)}
-                  className={`px-4 py-2 text-sm rounded-lg border-2 font-semibold ${moneda === m ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-400'}`}>
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custodios */}
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-xs text-gray-500 block mb-1">Custodios {fCustodios.length > 0 && `(${fCustodios.length})`}</label>
-            <div className="flex flex-wrap gap-2">
-              {custodios.map(c => (
-                <button key={c.id} onClick={() => toggle(fCustodios, setFCustodios, c.id)}
-                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${fCustodios.includes(c.id) ? 'bg-indigo-500 text-white border-indigo-500' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-                  {c.nombre}
-                </button>
-              ))}
-            </div>
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Custodios {fCustodios.length > 0 && `(${fCustodios.length})`}</label>
+          <div className="flex flex-wrap gap-2">
+            {custodios.map(c => (
+              <button key={c.id} onClick={() => toggle(fCustodios, setFCustodios, c.id)}
+                className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${fCustodios.includes(c.id) ? 'bg-indigo-500 text-white border-indigo-500' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                {c.nombre}
+              </button>
+            ))}
           </div>
         </div>
-
-        {/* Usuarios (admin) */}
         {esAdmin && usuarios.length > 0 && (
           <div>
             <label className="text-xs text-gray-500 block mb-1">Usuarios {fUsuarios.length > 0 && `(${fUsuarios.length})`}</label>
@@ -174,7 +181,6 @@ export default function Reportes() {
             </div>
           </div>
         )}
-
         {hayFiltros && (
           <button onClick={() => { setFUsuarios([]); setFCustodios([]) }}
             className="text-xs text-red-400 hover:text-red-600">✕ Limpiar filtros</button>
@@ -183,120 +189,138 @@ export default function Reportes() {
 
       {cargando ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"/></div>
-      ) : itemsMoneda.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center text-gray-400">
-          No hay tenencias en {moneda} {hayFiltros ? 'con estos filtros' : ''}
+          No hay tenencias {hayFiltros ? 'con estos filtros' : ''}
         </div>
       ) : (
         <>
-          {/* Tarjetas de totales */}
+          {/* Totales globales */}
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-indigo-600 rounded-xl p-5 text-white">
-              <p className="text-indigo-200 text-sm">Total {moneda}</p>
-              <p className="text-2xl font-bold mt-1">{moneda} {fmt(resumen.total)}</p>
+              <p className="text-indigo-200 text-sm">Total ARS</p>
+              <p className="text-xl font-bold mt-1">$ {fmt(totalArs)}</p>
+            </div>
+            <div className="bg-indigo-500 rounded-xl p-5 text-white">
+              <p className="text-indigo-200 text-sm">Total USD</p>
+              <p className="text-xl font-bold mt-1">USD {fmt(totalUsd)}</p>
             </div>
             <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <p className="text-gray-400 text-sm">TIR/TNA promedio pond.</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{fmt(resumen.tirPond)}%</p>
+              <p className="text-gray-400 text-sm">TIR/TNA prom. pond.</p>
+              <p className="text-xl font-bold text-green-600 mt-1">{fmt(global.tir)}%</p>
+              <p className="text-xs text-gray-300">base USD · estable</p>
             </div>
             <div className="bg-white rounded-xl p-5 border border-gray-100">
               <p className="text-gray-400 text-sm">Duration/plazo pond.</p>
-              <p className="text-2xl font-bold text-indigo-600 mt-1">{fmt(resumen.durPond)} <span className="text-sm text-gray-400">años</span></p>
-              <p className="text-xs text-gray-400">{plazoLegible(resumen.durPond)}</p>
-            </div>
-            <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <p className="text-gray-400 text-sm">Tenencias</p>
-              <p className="text-2xl font-bold text-gray-800 mt-1">{resumen.cantidad}</p>
+              <p className="text-xl font-bold text-indigo-600 mt-1">{fmt(meses(global.dur), 1)} <span className="text-sm text-gray-400">meses</span></p>
             </div>
           </div>
 
           {/* Gráficos */}
           <div className="grid grid-cols-3 gap-6">
-            {/* Por moneda: exposición real, expresada en USD */}
             <div className="bg-white rounded-xl border border-gray-100 p-4">
               <p className="text-sm font-semibold text-gray-600 mb-2">Exposición por moneda</p>
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}
-                    label={e => `${e.name} ${(e.percent * 100).toFixed(0)}%`}>
+                  <Pie data={porMoneda} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}
+                    label={e => `${e.name} ${(e.percent*100).toFixed(0)}%`}>
                     {porMoneda.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
                 </PieChart>
               </ResponsiveContainer>
-              <p className="text-center text-xs text-gray-400">Instrumentos según su moneda de origen (base USD)</p>
+              <p className="text-center text-xs text-gray-400">Base USD</p>
             </div>
-
-            {/* Por instrumento */}
             <div className="bg-white rounded-xl border border-gray-100 p-4">
-              <p className="text-sm font-semibold text-gray-600 mb-2">Por tipo de instrumento ({moneda})</p>
-              <ResponsiveContainer width="100%" height={220}>
+              <p className="text-sm font-semibold text-gray-600 mb-2">Por instrumento</p>
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={porInstrumento} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
+                  <Pie data={porInstrumento} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
                     {porInstrumento.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
+                  <Legend wrapperStyle={{ fontSize: 10 }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
-            {/* Por custodio (si aplica) */}
             {mostrarCustodios ? (
               <div className="bg-white rounded-xl border border-gray-100 p-4">
-                <p className="text-sm font-semibold text-gray-600 mb-2">Por custodio ({moneda})</p>
-                <ResponsiveContainer width="100%" height={220}>
+                <p className="text-sm font-semibold text-gray-600 mb-2">Por custodio</p>
+                <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={porCustodio} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
+                    <Pie data={porCustodio} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
                       {porCustodio.map((_, i) => <Cell key={i} fill={COLORES[i % COLORES.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v) => fmt(v)} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v) => `USD ${fmt(v)}`} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 p-4 flex items-center justify-center text-gray-300 text-sm">
-                {fCustodios.length === 1 ? 'Un solo custodio seleccionado' : 'Sin desglose por custodio'}
+                {fCustodios.length === 1 ? 'Un solo custodio' : 'Sin desglose'}
               </div>
             )}
           </div>
 
-          {/* Tabla detalle */}
+          {/* Tabla jerárquica */}
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    {['Instrumento', 'Ticker', 'Moneda', `Valuación ${moneda}`, '% Cartera', 'Tasa', 'Plazo', 'Custodio', esAdmin ? 'Usuario' : null]
-                      .filter(h => h !== null).map(h => <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>)}
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ticker</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Detalle</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Val. ARS</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Val. USD</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Tasa</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Plazo</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Custodio</th>
+                    {esAdmin && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Usuario</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {itemsMoneda.slice().sort((a,b) => parseFloat(b[valKey]) - parseFloat(a[valKey])).map((i, idx) => {
-                    const val = parseFloat(i[valKey] || 0)
-                    const pct = resumen.total > 0 ? (val / resumen.total * 100) : 0
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">{i.grupo}</span>
-                        </td>
-                        <td className="px-4 py-3 text-sm font-bold text-gray-700">{i.ticker}</td>
-                        <td className="px-4 py-3 text-xs text-gray-400">{i.moneda}</td>
-                        <td className="px-4 py-3 text-sm font-semibold">{fmt(val)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{fmt(pct)}%</td>
-                        <td className="px-4 py-3 text-sm" style={{ color: '#16a085' }}>{i.tasa ? `${fmt(i.tasa)}%` : '-'}</td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{plazoLegible(i.plazo_anios)}</td>
-                        <td className="px-4 py-3 text-xs text-gray-400">{i.custodio_nombre || '-'}</td>
-                        {esAdmin && <td className="px-4 py-3 text-xs text-gray-400">{i.usuario_nombre || '-'}</td>}
+                <tbody>
+                  {estructura.map(mon => (
+                    <Fragment key={`mon-wrap-${mon.moneda}`}>
+                      <tr className="bg-indigo-600 text-white">
+                        <td colSpan={colSpan} className="px-4 py-2 font-bold text-sm">💱 {mon.moneda}</td>
                       </tr>
-                    )
-                  })}
+                      {mon.grupos.map(g => (
+                        <Fragment key={`g-wrap-${mon.moneda}-${g.grupo}`}>
+                          <tr className="bg-gray-100">
+                            <td colSpan={2} className="px-4 py-1.5 pl-6 font-semibold text-xs text-gray-600 uppercase">{g.grupo}</td>
+                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalArs)}</td>
+                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalUsd)}</td>
+                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.pond.tir)}%</td>
+                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(meses(g.pond.dur),1)}m</td>
+                            <td colSpan={esAdmin ? 2 : 1}></td>
+                          </tr>
+                          {g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)}
+                        </Fragment>
+                      ))}
+                      <tr className="bg-indigo-50 border-y border-indigo-100 font-semibold">
+                        <td colSpan={2} className="px-4 py-2 text-sm text-indigo-700">Subtotal {mon.moneda}</td>
+                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalArs)}</td>
+                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalUsd)}</td>
+                        <td className="px-4 py-2 text-right text-sm text-green-600">{fmt(mon.pond.tir)}%</td>
+                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(meses(mon.pond.dur),1)}m</td>
+                        <td colSpan={esAdmin ? 2 : 1}></td>
+                      </tr>
+                    </Fragment>
+                  ))}
+                  <tr className="bg-gray-800 text-white font-bold">
+                    <td colSpan={2} className="px-4 py-3 text-sm">TOTAL GENERAL</td>
+                    <td className="px-4 py-3 text-right text-sm">$ {fmt(totalArs)}</td>
+                    <td className="px-4 py-3 text-right text-sm">USD {fmt(totalUsd)}</td>
+                    <td className="px-4 py-3 text-right text-sm text-green-300">{fmt(global.tir)}%</td>
+                    <td className="px-4 py-3 text-right text-sm">{fmt(meses(global.dur),1)}m</td>
+                    <td colSpan={esAdmin ? 2 : 1}></td>
+                  </tr>
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
-              {itemsMoneda.length} tenencia(s) · Total {moneda} {fmt(resumen.total)}
+            <div className="px-4 py-2 bg-gray-50 text-xs text-gray-400">
+              {items.length} tenencia(s) · Ponderaciones sobre base común USD (estables, no dependen de la moneda)
             </div>
           </div>
         </>
