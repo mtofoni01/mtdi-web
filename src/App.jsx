@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Cartera from './pages/Cartera'
+import Reportes from './pages/Reportes'
 import Movimientos from './pages/Movimientos'
 import CargaOperaciones from './pages/CargaOperaciones'
 import Watchlist from './pages/Watchlist'
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/cartera" replace />} />
             <Route path="cartera"             element={<Cartera />} />
+            <Route path="reportes"            element={<Reportes />} />
             <Route path="movimientos"         element={<Movimientos />} />
             <Route path="carga-operaciones"   element={<CargaOperaciones />} />
             <Route path="watchlist"           element={<Watchlist />} />
