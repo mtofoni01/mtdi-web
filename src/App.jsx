@@ -4,6 +4,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Cartera from './pages/Cartera'
 import Reportes from './pages/Reportes'
+import Evolucion from './pages/Evolucion'
 import Movimientos from './pages/Movimientos'
 import CargaOperaciones from './pages/CargaOperaciones'
 import Watchlist from './pages/Watchlist'
@@ -31,6 +32,7 @@ export default function App() {
             <Route index element={<Navigate to="/cartera" replace />} />
             <Route path="cartera"             element={<Cartera />} />
             <Route path="reportes"            element={<Reportes />} />
+            <Route path="evolucion"           element={<Evolucion />} />
             <Route path="movimientos"         element={<Movimientos />} />
             <Route path="carga-operaciones"   element={<CargaOperaciones />} />
             <Route path="watchlist"           element={<Watchlist />} />

@@ -250,6 +250,31 @@ export default function Reportes() {
     } catch {}
   }
 
+  // Guardar foto (snapshot) de la cartera actual
+  const [guardandoFoto, setGuardandoFoto] = useState(false)
+  const [msgFoto, setMsgFoto] = useState(null)
+  const guardarFoto = async () => {
+    const fecha = fechaCierre ? String(fechaCierre).split('T')[0] : new Date().toISOString().split('T')[0]
+    const etiqueta = prompt('Nombre de la foto (opcional):', `Cartera al ${new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR')}`)
+    if (etiqueta === null) return  // canceló
+    setGuardandoFoto(true)
+    setMsgFoto(null)
+    try {
+      const res = await authFetch('/api/cartera/snapshots', {
+        method: 'POST',
+        body: JSON.stringify({ fecha, etiqueta: etiqueta || null }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Error al guardar')
+      setMsgFoto({ tipo: 'ok', texto: 'Foto guardada correctamente' })
+    } catch (e) {
+      setMsgFoto({ tipo: 'error', texto: e.message })
+    } finally {
+      setGuardandoFoto(false)
+      setTimeout(() => setMsgFoto(null), 4000)
+    }
+  }
+
   const Fila = ({ i }) => {
     const ajustada = aplicarExp && Math.abs((i.tasaEf || 0) - (i.tasa || 0)) > 0.001
     return (
@@ -306,9 +331,21 @@ export default function Reportes() {
               📊 Excel
             </button>
           )}
+          {esAdmin && (
+            <button onClick={guardarFoto} disabled={guardandoFoto}
+              className="px-4 py-2 text-sm rounded-lg text-white disabled:opacity-60" style={{ backgroundColor: '#8e44ad' }}>
+              {guardandoFoto ? 'Guardando...' : '📸 Guardar foto'}
+            </button>
+          )}
           <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻ Actualizar</button>
         </div>
       </div>
+
+      {msgFoto && (
+        <div className={`px-4 py-3 rounded-lg text-sm border no-print ${msgFoto.tipo === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+          {msgFoto.tipo === 'ok' ? '✓ ' : '⚠️ '}{msgFoto.texto}
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 space-y-3 no-print">

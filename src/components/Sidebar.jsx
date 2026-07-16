@@ -23,6 +23,7 @@ const secciones = [
     titulo: 'Análisis',
     items: [
       { to: '/watchlist',          label: '👁️ Watchlist' },
+      { to: '/evolucion',          label: '📈 Evolución', admin: true },
       { to: '/curva-rendimientos', label: '📉 Curva de Rendimientos' },
       { to: '/calculadora-tir',    label: '🧮 Calculadora TIR' },
     ],
