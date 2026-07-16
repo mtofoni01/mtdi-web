@@ -254,17 +254,17 @@ export default function Reportes() {
     const ajustada = aplicarExp && Math.abs((i.tasaEf || 0) - (i.tasa || 0)) > 0.001
     return (
     <tr className="hover:bg-gray-50">
-      <td className="px-4 py-2 pl-8 text-sm font-semibold text-gray-700">{i.ticker}</td>
-      <td className="px-4 py-2 text-xs text-gray-400">{i.descripcion?.slice(0, 28)}</td>
-      <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_ars)}</td>
-      <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_usd)}</td>
-      <td className="px-4 py-2 text-sm text-right" style={{ color: '#16a085' }}>
+      <td className="px-4 py-1.5 pl-8 text-xs font-medium text-gray-600">{i.ticker}</td>
+      <td className="px-4 py-1.5 text-xs text-gray-400">{i.descripcion?.slice(0, 28)}</td>
+      <td className="px-4 py-1.5 text-xs text-right text-gray-600">{fmt(i.valuacion_ars)}</td>
+      <td className="px-4 py-1.5 text-xs text-right text-gray-600">{fmt(i.valuacion_usd)}</td>
+      <td className="px-4 py-1.5 text-xs text-right" style={{ color: '#16a085' }}>
         {i.tasaEf ? `${fmt(i.tasaEf)}%` : '—'}
         {ajustada && <span className="text-gray-300 text-xs ml-1" title="Incluye expectativa">*</span>}
       </td>
-      <td className="px-4 py-2 text-xs text-right text-gray-500">{fmtMeses(i.plazo_anios)}</td>
-      <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.custodio_nombre || '—'}</td>
-      {esAdmin && <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.usuario_nombre || '—'}</td>}
+      <td className="px-4 py-1.5 text-xs text-right text-gray-400">{fmtMeses(i.plazo_anios)}</td>
+      <td className="px-4 py-1.5 text-xs text-gray-400 no-print">{i.custodio_nombre || '—'}</td>
+      {esAdmin && <td className="px-4 py-1.5 text-xs text-gray-400 no-print">{i.usuario_nombre || '—'}</td>}
     </tr>
     )
   }
@@ -275,6 +275,8 @@ export default function Reportes() {
     <div className="space-y-6">
       <style>{`
         @media print {
+          /* Forzar que los fondos de color se impriman */
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           /* Ocultar todo lo que no sea el reporte */
           body * { visibility: hidden; }
           #reporte-imprimible, #reporte-imprimible * { visibility: visible; }
@@ -482,57 +484,60 @@ export default function Reportes() {
                 <tbody>
                   {estructura.map(mon => (
                     <Fragment key={`mon-wrap-${mon.moneda}`}>
-                      <tr className="bg-indigo-600 text-white">
-                        <td colSpan={colSpan} className="px-4 py-2 font-bold text-sm">{mon.moneda}</td>
+                      {/* Encabezado de moneda — sección */}
+                      <tr className="bg-indigo-700 text-white">
+                        <td colSpan={colSpan} className="px-4 py-2.5 font-bold text-base">{mon.moneda}</td>
                       </tr>
                       {mon.grupos.map(g => (
                         <Fragment key={`g-wrap-${mon.moneda}-${g.grupo}`}>
-                          <tr className="bg-gray-100">
-                            <td colSpan={2} className="px-4 py-1.5 pl-6 font-semibold text-xs text-gray-600 uppercase">{g.grupo}</td>
-                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalArs)}</td>
-                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalUsd)}</td>
-                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.pond.tir)}%</td>
-                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmtMeses(g.pond.dur)}</td>
+                          {/* Grupo — contraste medio */}
+                          <tr className="bg-slate-200">
+                            <td colSpan={2} className="px-4 py-2 pl-6 font-bold text-sm text-slate-700 uppercase">{g.grupo}</td>
+                            <td className="px-4 py-2 text-right text-sm font-semibold text-slate-600">{fmt(g.totalArs)}</td>
+                            <td className="px-4 py-2 text-right text-sm font-semibold text-slate-600">{fmt(g.totalUsd)}</td>
+                            <td className="px-4 py-2 text-right text-sm font-semibold text-slate-600">{fmt(g.pond.tir)}%</td>
+                            <td className="px-4 py-2 text-right text-sm font-semibold text-slate-600">{fmtMeses(g.pond.dur)}</td>
                             <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                           </tr>
 
                           {g.esRentaFija ? (
-                            // Renta fija: nivel extra de subgrupo (Letras, Bonos CER, etc.)
                             g.subgrupos.map(sg => (
                               <Fragment key={`sg-${mon.moneda}-${sg.subgrupo}`}>
-                                <tr className="bg-gray-50">
-                                  <td colSpan={2} className="px-4 py-1 pl-10 text-xs italic text-gray-500">{sg.subgrupo}</td>
-                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.totalArs)}</td>
-                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.totalUsd)}</td>
-                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.pond.tir)}%</td>
-                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmtMeses(sg.pond.dur)}</td>
+                                {/* Subgrupo — suave */}
+                                <tr className="bg-gray-100">
+                                  <td colSpan={2} className="px-4 py-1.5 pl-10 text-xs font-semibold text-gray-500">{sg.subgrupo}</td>
+                                  <td className="px-4 py-1.5 text-right text-xs font-medium text-gray-500">{fmt(sg.totalArs)}</td>
+                                  <td className="px-4 py-1.5 text-right text-xs font-medium text-gray-500">{fmt(sg.totalUsd)}</td>
+                                  <td className="px-4 py-1.5 text-right text-xs font-medium text-gray-500">{fmt(sg.pond.tir)}%</td>
+                                  <td className="px-4 py-1.5 text-right text-xs font-medium text-gray-500">{fmtMeses(sg.pond.dur)}</td>
                                   <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                                 </tr>
                                 {verDetalle && sg.items.map((i, idx) => <Fila key={`${mon.moneda}-${sg.subgrupo}-${idx}`} i={i} />)}
                               </Fragment>
                             ))
                           ) : (
-                            // Resto de grupos: items directo
                             verDetalle && g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)
                           )}
                         </Fragment>
                       ))}
-                      <tr className="bg-indigo-50 border-y border-indigo-100 font-semibold">
-                        <td colSpan={2} className="px-4 py-2 text-sm text-indigo-700">Subtotal {mon.moneda}</td>
-                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalArs)}</td>
-                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalUsd)}</td>
-                        <td className="px-4 py-2 text-right text-sm text-green-600">{fmt(mon.pond.tir)}%</td>
-                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmtMeses(mon.pond.dur)}</td>
+                      {/* Subtotal de moneda — fuerte */}
+                      <tr className="bg-indigo-100 border-y-2 border-indigo-300">
+                        <td colSpan={2} className="px-4 py-2.5 text-sm font-bold text-indigo-800">Subtotal {mon.moneda}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-indigo-800">{fmt(mon.totalArs)}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-indigo-800">{fmt(mon.totalUsd)}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-green-700">{fmt(mon.pond.tir)}%</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-indigo-800">{fmtMeses(mon.pond.dur)}</td>
                         <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                       </tr>
                     </Fragment>
                   ))}
-                  <tr className="bg-gray-800 text-white font-bold">
-                    <td colSpan={2} className="px-4 py-3 text-sm">TOTAL GENERAL</td>
-                    <td className="px-4 py-3 text-right text-sm">$ {fmt(totalArs)}</td>
-                    <td className="px-4 py-3 text-right text-sm">USD {fmt(totalUsd)}</td>
-                    <td className="px-4 py-3 text-right text-sm text-green-300">{fmt(global.tir)}%</td>
-                    <td className="px-4 py-3 text-right text-sm">{fmtMeses(global.dur)}</td>
+                  {/* Total general — el más grande */}
+                  <tr className="bg-gray-900 text-white">
+                    <td colSpan={2} className="px-4 py-3.5 text-base font-bold">TOTAL GENERAL</td>
+                    <td className="px-4 py-3.5 text-right text-base font-bold">$ {fmt(totalArs)}</td>
+                    <td className="px-4 py-3.5 text-right text-base font-bold">USD {fmt(totalUsd)}</td>
+                    <td className="px-4 py-3.5 text-right text-base font-bold text-green-300">{fmt(global.tir)}%</td>
+                    <td className="px-4 py-3.5 text-right text-base font-bold">{fmtMeses(global.dur)}</td>
                     <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                   </tr>
                 </tbody>
