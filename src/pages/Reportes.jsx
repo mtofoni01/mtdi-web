@@ -39,23 +39,47 @@ const ORDEN_SUBGRUPO = {
 }
 
 // Pondera tasa y plazo sobre base_usd (denominador común y estable)
-function ponderar(items) {
+function ponderar(items, campoTasa = 'tasa') {
   const base = items.reduce((s, i) => s + parseFloat(i.base_usd || 0), 0)
   if (base === 0) return { tir: 0, dur: 0, base: 0 }
   let tir = 0, dur = 0
   for (const i of items) {
     const peso = parseFloat(i.base_usd || 0) / base
-    tir += parseFloat(i.tasa || 0) * peso
+    tir += parseFloat(i[campoTasa] || 0) * peso
     dur += parseFloat(i.plazo_anios || 0) * peso
   }
   return { tir, dur, base }
+}
+
+// Tasa comparable = tasa pura + variación esperada del factor de ajuste,
+// para llevar todo a una base nominal en pesos comparable.
+//   • tasa fija $ / letras $ → TIR (ya es nominal)
+//   • CER                    → TIR + inflación esperada
+//   • dólar linked / USD     → TIR + devaluación esperada
+function tasaComparable(item, params) {
+  const tir = parseFloat(item.tasa || 0)
+  const inflacion = parseFloat(params.inflacion || 0)
+  const devaluacion = parseFloat(params.devaluacion || 0)
+  switch (item.tipo) {
+    case 'bono_cer':
+      return tir + inflacion
+    case 'bono_dv':
+    case 'bono_usd':
+    case 'letra_usd':
+    case 'on':
+      // ON: se ajusta por devaluación solo si la especie es en USD (moneda USD)
+      return item.moneda === 'USD' ? tir + devaluacion : tir
+    default:
+      // bono_ars, letra_ars, PF, caución, FCI, vista, acciones → tasa nominal tal cual
+      return tir
+  }
 }
 
 export default function Reportes() {
   const { authFetch, usuario, token } = useAuth()
   const esAdmin = usuario?.rol === 'admin'
 
-  const [items, setItems]         = useState([])
+  const [itemsRaw, setItemsRaw]    = useState([])
   const [usuarios, setUsuarios]   = useState([])
   const [custodios, setCustodios] = useState([])
   const [cargando, setCargando]   = useState(true)
@@ -65,6 +89,10 @@ export default function Reportes() {
   const [fUsuarios, setFUsuarios]   = useState([])
   const [fCustodios, setFCustodios] = useState([])
   const [verDetalle, setVerDetalle] = useState(true)  // toggle detalle por especie
+  // Capa 2 — expectativas (tasas comparables). De sesión.
+  const [aplicarExp, setAplicarExp] = useState(false)
+  const [inflacion, setInflacion]   = useState('')   // % esperado 12m
+  const [devaluacion, setDevaluacion] = useState('') // % esperado 12m
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -79,7 +107,7 @@ export default function Reportes() {
       ])
       const dRep  = await rRep.json()
       const dCust = await rCust.json()
-      setItems(dRep.data || [])
+      setItemsRaw(dRep.data || [])
       setCustodios(dCust.data || [])
       setFechaCierre(dRep.fecha_cierre || null)
       setTc(dRep.tc || null)
@@ -95,7 +123,20 @@ export default function Reportes() {
 
   useEffect(() => { cargar() }, [cargar])
 
-  const global = useMemo(() => ponderar(items), [items])
+  // Params de expectativas
+  const params = useMemo(() => ({
+    inflacion: parseFloat(inflacion || 0),
+    devaluacion: parseFloat(devaluacion || 0),
+  }), [inflacion, devaluacion])
+
+  // Items con tasa efectiva: comparable (si aplicarExp) o pura.
+  // 'tasa' se mantiene como la pura; 'tasaEf' es la que se usa para mostrar/ponderar.
+  const items = useMemo(() => itemsRaw.map(i => ({
+    ...i,
+    tasaEf: aplicarExp ? tasaComparable(i, params) : parseFloat(i.tasa || 0),
+  })), [itemsRaw, aplicarExp, params])
+
+  const global = useMemo(() => ponderar(items, 'tasaEf'), [items])
   const totalArs = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0), [items])
   const totalUsd = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0), [items])
 
@@ -123,7 +164,7 @@ export default function Reportes() {
             .map(([subgrupo, its]) => ({
               subgrupo,
               items: its.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
-              pond: ponderar(its),
+              pond: ponderar(its, 'tasaEf'),
               totalArs: its.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
               totalUsd: its.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
             }))
@@ -133,7 +174,7 @@ export default function Reportes() {
             esRentaFija,
             subgrupos,
             items: itsGrupo.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
-            pond: ponderar(itsGrupo),
+            pond: ponderar(itsGrupo, 'tasaEf'),
             totalArs: itsGrupo.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
             totalUsd: itsGrupo.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
           }
@@ -142,7 +183,7 @@ export default function Reportes() {
       resultado.push({
         moneda: mon,
         grupos,
-        pond: ponderar(itemsMon),
+        pond: ponderar(itemsMon, 'tasaEf'),
         totalArs: itemsMon.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
         totalUsd: itemsMon.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
       })
@@ -209,18 +250,24 @@ export default function Reportes() {
     } catch {}
   }
 
-  const Fila = ({ i }) => (
+  const Fila = ({ i }) => {
+    const ajustada = aplicarExp && Math.abs((i.tasaEf || 0) - (i.tasa || 0)) > 0.001
+    return (
     <tr className="hover:bg-gray-50">
       <td className="px-4 py-2 pl-8 text-sm font-semibold text-gray-700">{i.ticker}</td>
       <td className="px-4 py-2 text-xs text-gray-400">{i.descripcion?.slice(0, 28)}</td>
       <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_ars)}</td>
       <td className="px-4 py-2 text-sm text-right">{fmt(i.valuacion_usd)}</td>
-      <td className="px-4 py-2 text-sm text-right" style={{ color: '#16a085' }}>{i.tasa ? `${fmt(i.tasa)}%` : '—'}</td>
+      <td className="px-4 py-2 text-sm text-right" style={{ color: '#16a085' }}>
+        {i.tasaEf ? `${fmt(i.tasaEf)}%` : '—'}
+        {ajustada && <span className="text-gray-300 text-xs ml-1" title="Incluye expectativa">*</span>}
+      </td>
       <td className="px-4 py-2 text-xs text-right text-gray-500">{fmtMeses(i.plazo_anios)}</td>
       <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.custodio_nombre || '—'}</td>
       {esAdmin && <td className="px-4 py-2 text-xs text-gray-400 no-print">{i.usuario_nombre || '—'}</td>}
     </tr>
-  )
+    )
+  }
 
   const colSpan = esAdmin ? 8 : 7
 
@@ -293,6 +340,38 @@ export default function Reportes() {
         )}
       </div>
 
+      {/* Panel de expectativas (Capa 2) */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 no-print">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={aplicarExp} onChange={e => setAplicarExp(e.target.checked)}
+              className="w-4 h-4 accent-indigo-500" />
+            <span className="text-sm font-semibold text-gray-700">Aplicar expectativas (tasas comparables)</span>
+          </label>
+          <div className={`flex items-center gap-4 ${aplicarExp ? '' : 'opacity-40 pointer-events-none'}`}>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Inflación esp. 12m</span>
+              <input type="number" value={inflacion} onChange={e => setInflacion(e.target.value)}
+                placeholder="0" step="any"
+                className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:border-indigo-400" />
+              <span className="text-xs text-gray-400">%</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Devaluación esp. 12m</span>
+              <input type="number" value={devaluacion} onChange={e => setDevaluacion(e.target.value)}
+                placeholder="0" step="any"
+                className="w-20 border border-gray-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:border-indigo-400" />
+              <span className="text-xs text-gray-400">%</span>
+            </div>
+          </div>
+        </div>
+        {aplicarExp && (
+          <p className="text-xs text-gray-400 mt-2 italic">
+            Las tasas de instrumentos CER incluyen la inflación esperada, y las de instrumentos en dólares/dólar-linked la devaluación esperada, para expresarlas en una base nominal en pesos comparable. Es una perspectiva estimada, no un dato de mercado.
+          </p>
+        )}
+      </div>
+
       {cargando ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"/></div>
       ) : items.length === 0 ? (
@@ -309,6 +388,12 @@ export default function Reportes() {
               {fechaCierre && ` · Cotizaciones al ${new Date(String(fechaCierre).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}`}
               {tc && ` · TC ${fmt(tc, 2)}`}
             </p>
+            {aplicarExp && (
+              <p className="text-xs text-gray-500 mt-1">
+                Tasas comparables con expectativas — Inflación 12m: {fmt(params.inflacion, 1)}% · Devaluación 12m: {fmt(params.devaluacion, 1)}%.
+                <span className="italic"> Perspectiva estimada, no constituye un dato de mercado.</span>
+              </p>
+            )}
           </div>
           {/* Totales globales */}
           <div className="grid grid-cols-4 gap-4">
@@ -321,9 +406,9 @@ export default function Reportes() {
               <p className="text-xl font-bold mt-1">USD {fmt(totalUsd)}</p>
             </div>
             <div className="bg-white rounded-xl p-5 border border-gray-100">
-              <p className="text-gray-400 text-sm">TIR/TNA prom. pond.</p>
+              <p className="text-gray-400 text-sm">TIR/TNA prom. pond.{aplicarExp && ' (comp.)'}</p>
               <p className="text-xl font-bold text-green-600 mt-1">{fmt(global.tir)}%</p>
-              <p className="text-xs text-gray-300">base USD · estable</p>
+              <p className="text-xs text-gray-300">{aplicarExp ? 'con expectativas' : 'base USD · estable'}</p>
             </div>
             <div className="bg-white rounded-xl p-5 border border-gray-100">
               <p className="text-gray-400 text-sm">Duration/plazo pond.</p>
