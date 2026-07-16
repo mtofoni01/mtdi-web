@@ -7,6 +7,28 @@ function fmt(n, dec = 0) {
   return parseFloat(n || 0).toLocaleString('es-AR', { maximumFractionDigits: dec })
 }
 
+// Evalúa la frescura del precio: días de antigüedad y estado de alerta.
+// Considera solo días hábiles aproximados (fin de semana no cuenta como atraso).
+function estadoPrecio(fechaPrecio) {
+  if (!fechaPrecio) return { dias: null, nivel: 'sin', texto: 'Sin precio' }
+  const f = new Date(String(fechaPrecio).split('T')[0] + 'T12:00:00')
+  const hoy = new Date()
+  hoy.setHours(12, 0, 0, 0)
+  const diffMs = hoy - f
+  const dias = Math.floor(diffMs / 86400000)
+  // Descontar fines de semana del atraso (aprox)
+  let habiles = 0
+  for (let d = 1; d <= dias; d++) {
+    const dd = new Date(f); dd.setDate(f.getDate() + d)
+    const dow = dd.getDay()
+    if (dow !== 0 && dow !== 6) habiles++
+  }
+  let nivel = 'ok'
+  if (habiles >= 3) nivel = 'alerta'
+  else if (habiles >= 1) nivel = 'aviso'
+  return { dias, habiles, nivel, texto: fechaPrecio }
+}
+
 function abreviarVol(vol) {
   if (!vol) return '-'
   const n = parseFloat(vol)
@@ -504,6 +526,25 @@ export default function Cartera() {
         </div>
       )}
 
+      {/* Alerta de precios desactualizados */}
+      {(() => {
+        const desact = posiciones.filter(p => {
+          const ep = estadoPrecio(p.fecha_precio)
+          return ep.nivel === 'alerta' || ep.nivel === 'sin'
+        })
+        if (desact.length === 0) return null
+        return (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
+            <span className="text-red-500">⚠️</span>
+            <span className="text-sm text-red-700">
+              <strong>{desact.length}</strong> tenencia(s) con precio desactualizado o sin precio:
+              <span className="font-medium"> {desact.map(d => d.ticker).join(', ')}</span>.
+              Revisá la columna "Actualizado" o cargá el precio manualmente.
+            </span>
+          </div>
+        )
+      })()}
+
       {/* Informes colapsables */}
       {mostrarInformes && posiciones.length > 0 && (
         <Informes posiciones={posiciones} />
@@ -535,6 +576,7 @@ export default function Cartera() {
                     <Th col="duration"           label="MD" />
                     <Th col="volumen_operado"    label="Volumen" />
                     <Th col="custodio_nombre"    label="Custodio" />
+                    <Th col="fecha_precio"       label="Actualizado" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -598,6 +640,28 @@ export default function Cartera() {
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400">{abreviarVol(item.volumen_operado)}</td>
                         <td className="px-4 py-3 text-xs text-gray-500">{item.custodio_nombre || '-'}</td>
+                        <td className="px-4 py-3">
+                          {(() => {
+                            const ep = estadoPrecio(item.fecha_precio)
+                            if (ep.nivel === 'sin') {
+                              return <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Sin precio</span>
+                            }
+                            const colores = {
+                              ok:     { bg: 'transparent', tx: '#9ca3af', label: '' },
+                              aviso:  { bg: '#fef3c7', tx: '#92400e', label: '⚠' },
+                              alerta: { bg: '#fee2e2', tx: '#b91c1c', label: '⚠' },
+                            }
+                            const c = colores[ep.nivel]
+                            const fechaTxt = new Date(String(item.fecha_precio).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')
+                            return (
+                              <span className="text-xs px-2 py-1 rounded-full font-medium inline-flex items-center gap-1"
+                                style={{ backgroundColor: c.bg, color: c.tx }}
+                                title={ep.nivel === 'ok' ? 'Precio actualizado' : `Desactualizado hace ${ep.habiles} día(s) hábil(es)`}>
+                                {c.label} {fechaTxt}
+                              </span>
+                            )
+                          })()}
+                        </td>
                       </tr>
                     )
                   })}
