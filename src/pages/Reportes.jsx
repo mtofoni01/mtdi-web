@@ -13,19 +13,29 @@ function meses(anios) {
   return (parseFloat(anios || 0) * 12)
 }
 function fmtMeses(anios) {
-  const m = meses(anios)
-  if (m < 0.5) return `${Math.round(anios * 365)} d`
-  return `${m.toFixed(1)} m`
+  return `${meses(anios).toFixed(1)} m`
 }
 
-// Orden de liquidez: más líquido primero
+// Orden fijo de grupos (nivel 2): colocaciones líquidas → renta variable → renta fija
 const ORDEN_GRUPO = {
   'Depósitos a la vista': 1,
-  'Plazos fijos': 2,
-  'Cauciones': 3,
-  'FCI': 4,
-  'Renta fija': 5,
-  'Renta variable': 6,
+  'FCI': 2,
+  'Plazos fijos': 3,
+  'Cauciones': 4,
+  'Renta variable': 5,
+  'Renta fija': 6,
+}
+
+// Orden fijo de subgrupos dentro de Renta fija (nivel 3)
+const ORDEN_SUBGRUPO = {
+  'Letras $': 1,
+  'Letras USD': 2,
+  'Bonos $ tasa fija': 3,
+  'Bonos $ CER': 4,
+  'Bonos $ dólar linked': 5,
+  'Bonos USD': 6,
+  'Obligaciones negociables': 7,
+  'Otros': 99,
 }
 
 // Pondera tasa y plazo sobre base_usd (denominador común y estable)
@@ -89,27 +99,45 @@ export default function Reportes() {
   const totalArs = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0), [items])
   const totalUsd = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0), [items])
 
-  // Estructura jerárquica: moneda → grupo de instrumento
+  // Estructura jerárquica: moneda → grupo → subgrupo → items
   const estructura = useMemo(() => {
     const monedas = {}
     for (const i of items) {
       const mon = i.moneda || 'ARS'
-      if (!monedas[mon]) monedas[mon] = {}
       const g = i.grupo || 'Otros'
-      if (!monedas[mon][g]) monedas[mon][g] = []
-      monedas[mon][g].push(i)
+      const sg = i.subgrupo || g
+      if (!monedas[mon]) monedas[mon] = {}
+      if (!monedas[mon][g]) monedas[mon][g] = {}
+      if (!monedas[mon][g][sg]) monedas[mon][g][sg] = []
+      monedas[mon][g][sg].push(i)
     }
     const resultado = []
     for (const mon of Object.keys(monedas).sort()) {
       const grupos = Object.entries(monedas[mon])
         .sort((a, b) => (ORDEN_GRUPO[a[0]] || 99) - (ORDEN_GRUPO[b[0]] || 99))
-        .map(([grupo, its]) => ({
-          grupo,
-          items: its.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
-          pond: ponderar(its),
-          totalArs: its.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
-          totalUsd: its.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
-        }))
+        .map(([grupo, subMap]) => {
+          const esRentaFija = grupo === 'Renta fija'
+          // Subgrupos ordenados (solo se muestran como nivel extra en renta fija)
+          const subgrupos = Object.entries(subMap)
+            .sort((a, b) => (ORDEN_SUBGRUPO[a[0]] || 99) - (ORDEN_SUBGRUPO[b[0]] || 99))
+            .map(([subgrupo, its]) => ({
+              subgrupo,
+              items: its.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
+              pond: ponderar(its),
+              totalArs: its.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
+              totalUsd: its.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
+            }))
+          const itsGrupo = Object.values(subMap).flat()
+          return {
+            grupo,
+            esRentaFija,
+            subgrupos,
+            items: itsGrupo.slice().sort((a, b) => parseFloat(a.plazo_anios) - parseFloat(b.plazo_anios)),
+            pond: ponderar(itsGrupo),
+            totalArs: itsGrupo.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0),
+            totalUsd: itsGrupo.reduce((s, i) => s + parseFloat(i.valuacion_usd || 0), 0),
+          }
+        })
       const itemsMon = items.filter(i => (i.moneda || 'ARS') === mon)
       resultado.push({
         moneda: mon,
@@ -379,10 +407,29 @@ export default function Reportes() {
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalArs)}</td>
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.totalUsd)}</td>
                             <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(g.pond.tir)}%</td>
-                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmt(meses(g.pond.dur),1)}m</td>
+                            <td className="px-4 py-1.5 text-right text-xs text-gray-400">{fmtMeses(g.pond.dur)}</td>
                             <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                           </tr>
-                          {verDetalle && g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)}
+
+                          {g.esRentaFija ? (
+                            // Renta fija: nivel extra de subgrupo (Letras, Bonos CER, etc.)
+                            g.subgrupos.map(sg => (
+                              <Fragment key={`sg-${mon.moneda}-${sg.subgrupo}`}>
+                                <tr className="bg-gray-50">
+                                  <td colSpan={2} className="px-4 py-1 pl-10 text-xs italic text-gray-500">{sg.subgrupo}</td>
+                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.totalArs)}</td>
+                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.totalUsd)}</td>
+                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmt(sg.pond.tir)}%</td>
+                                  <td className="px-4 py-1 text-right text-xs text-gray-400">{fmtMeses(sg.pond.dur)}</td>
+                                  <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
+                                </tr>
+                                {verDetalle && sg.items.map((i, idx) => <Fila key={`${mon.moneda}-${sg.subgrupo}-${idx}`} i={i} />)}
+                              </Fragment>
+                            ))
+                          ) : (
+                            // Resto de grupos: items directo
+                            verDetalle && g.items.map((i, idx) => <Fila key={`${mon.moneda}-${g.grupo}-${idx}`} i={i} />)
+                          )}
                         </Fragment>
                       ))}
                       <tr className="bg-indigo-50 border-y border-indigo-100 font-semibold">
@@ -390,7 +437,7 @@ export default function Reportes() {
                         <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalArs)}</td>
                         <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(mon.totalUsd)}</td>
                         <td className="px-4 py-2 text-right text-sm text-green-600">{fmt(mon.pond.tir)}%</td>
-                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmt(meses(mon.pond.dur),1)}m</td>
+                        <td className="px-4 py-2 text-right text-sm text-indigo-700">{fmtMeses(mon.pond.dur)}</td>
                         <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                       </tr>
                     </Fragment>
@@ -400,7 +447,7 @@ export default function Reportes() {
                     <td className="px-4 py-3 text-right text-sm">$ {fmt(totalArs)}</td>
                     <td className="px-4 py-3 text-right text-sm">USD {fmt(totalUsd)}</td>
                     <td className="px-4 py-3 text-right text-sm text-green-300">{fmt(global.tir)}%</td>
-                    <td className="px-4 py-3 text-right text-sm">{fmt(meses(global.dur),1)}m</td>
+                    <td className="px-4 py-3 text-right text-sm">{fmtMeses(global.dur)}</td>
                     <td colSpan={esAdmin ? 2 : 1} className="no-print"></td>
                   </tr>
                 </tbody>
