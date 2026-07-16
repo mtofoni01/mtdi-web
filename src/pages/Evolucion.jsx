@@ -1,6 +1,7 @@
 // pages/Evolucion.jsx
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
 function fmt(n, dec = 2) {
   return parseFloat(n || 0).toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
@@ -55,6 +56,19 @@ export default function Evolucion() {
   }, [authFetch])
 
   useEffect(() => { cargarFotos() }, [cargarFotos])
+
+  // Serie cronológica ascendente para los gráficos de evolución
+  const serie = useMemo(() => {
+    return fotos
+      .slice()
+      .sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+      .map(f => ({
+        fecha: fmtFecha(f.fecha),
+        totalUsd: Math.round(parseFloat(f.total_usd || 0)),
+        tir: Math.round(parseFloat(f.tir_pond || 0) * 100) / 100,
+        duration: Math.round(meses(f.duration_pond) * 10) / 10,
+      }))
+  }, [fotos])
 
   const comparar = useCallback(async () => {
     if (!idA || !idB || idA === idB) { setComp(null); return }
@@ -197,6 +211,49 @@ export default function Evolucion() {
           ) : (
             <div className="bg-white rounded-xl border border-gray-100 p-8 text-center text-gray-400">
               Elegí dos fotos distintas para ver la comparación
+            </div>
+          )}
+
+          {/* Gráficos de evolución (se enriquecen a medida que sumás fotos) */}
+          {serie.length >= 2 && (
+            <div className="grid grid-cols-2 gap-6">
+              {/* Patrimonio en USD */}
+              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                <p className="text-sm font-semibold text-gray-600 mb-3">Evolución del patrimonio (USD)</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={serie} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                    <Tooltip formatter={v => `USD ${fmt(v)}`} />
+                    <Line type="monotone" dataKey="totalUsd" name="Total USD" stroke="#4F6EF7" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* TIR y Duration con doble eje */}
+              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                <p className="text-sm font-semibold text-gray-600 mb-3">Evolución de indicadores</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={serie} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickFormatter={v => `${v}%`}
+                      label={{ value: 'TIR', angle: -90, position: 'insideLeft', fontSize: 11, fill: '#16a085' }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickFormatter={v => `${v}m`}
+                      label={{ value: 'Duration', angle: 90, position: 'insideRight', fontSize: 11, fill: '#8e44ad' }} />
+                    <Tooltip formatter={(v, n) => n === 'TIR' ? `${fmt(v)}%` : `${fmt(v,1)} m`} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="tir" name="TIR" stroke="#16a085" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line yAxisId="right" type="monotone" dataKey="duration" name="Duration" stroke="#8e44ad" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+          {serie.length === 1 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-6 text-center text-sm text-gray-400">
+              Con una sola foto todavía no se puede graficar la evolución. Guardá al menos una segunda foto (idealmente a fin de mes) para ver las tendencias.
             </div>
           )}
 
