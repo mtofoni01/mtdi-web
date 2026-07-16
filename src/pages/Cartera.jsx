@@ -492,7 +492,7 @@ export default function Cartera() {
             <p className="text-2xl font-bold mt-1">USD {fmt(resumen.totalUSD)}</p>
             {dolar && (
               <p className="text-indigo-200 text-xs mt-2 pt-2 border-t border-indigo-400">
-                TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo}: ${fmt(dolar.valor, 2)}
+                Valuado a dólar {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo}: ${fmt(dolar.valor, 2)}
                 <span className="opacity-70"> · {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}</span>
               </p>
             )}

@@ -82,15 +82,16 @@ export default function CalculadoraTIR() {
       .catch(() => {})
   }, [authFetch])
 
-  // Conversores (usan el TC vigente)
+  // Conversores (usan el MEP vendedor: lo que pagás para hacerte de USD)
+  const tcCalc = dolar?.valor || null
   const onArs = (v) => {
     setConvArs(v)
-    if (dolar?.valor && v) setConvUsd((parseFloat(v) / dolar.valor).toFixed(2))
+    if (tcCalc && v) setConvUsd((parseFloat(v) / tcCalc).toFixed(2))
     else setConvUsd('')
   }
   const onUsd = (v) => {
     setConvUsd(v)
-    if (dolar?.valor && v) setConvArs((parseFloat(v) * dolar.valor).toFixed(2))
+    if (tcCalc && v) setConvArs((parseFloat(v) * tcCalc).toFixed(2))
     else setConvArs('')
   }
 
@@ -215,12 +216,12 @@ export default function CalculadoraTIR() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">🧮 Calculadora TIR</h1>
 
-      {/* TC de valuación + conversor rápido */}
-      {dolar && (
+      {/* TC de referencia + conversor rápido */}
+      {dolar && tcCalc && (
         <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500 uppercase">TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo}</span>
-            <span className="text-lg font-bold text-indigo-600">${parseFloat(dolar.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-xs font-semibold text-gray-500 uppercase">TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo || ''}</span>
+            <span className="text-lg font-bold text-indigo-600">${parseFloat(tcCalc).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             <span className="text-xs text-gray-400">
               {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}
             </span>
