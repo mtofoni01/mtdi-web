@@ -28,6 +28,21 @@ const TIPOS_ESPECIE = [
 
 const MONEDAS = ['ARS', 'USD']
 
+const SECTORES = [
+  { v: '', l: 'Sin clasificar' },
+  { v: 'publico_nacional',   l: 'Público Nacional' },
+  { v: 'publico_provincial', l: 'Público Provincial' },
+  { v: 'publico_otros',      l: 'Público Otros' },
+  { v: 'privado',            l: 'Privado' },
+  { v: 'mixto',              l: 'Mixto' },
+]
+const RIESGOS = [
+  { v: '', l: 'Sin clasificar' },
+  { v: 'argentina',  l: 'Argentina' },
+  { v: 'externo',    l: 'Externo' },
+  { v: 'emergentes', l: 'Emergentes' },
+]
+
 export default function Especies() {
   const { authFetch } = useAuth()
   const [especies, setEspecies]   = useState([])
@@ -38,7 +53,7 @@ export default function Especies() {
   const [mensaje, setMensaje]     = useState(null)
   const [busqueda, setBusqueda]   = useState('')
   const [formNueva, setFormNueva] = useState({
-    ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: ''
+    ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: '', sector: '', riesgo: ''
   })
   const [agregando, setAgregando] = useState(false)
   const [importando, setImportando] = useState(false)
@@ -62,6 +77,8 @@ export default function Especies() {
       moneda:      especie.moneda,
       descripcion: especie.descripcion,
       fecha_vto:   especie.fecha_vto ? especie.fecha_vto.split('T')[0] : '',
+      sector:      especie.sector || '',
+      riesgo:      especie.riesgo || '',
     })
     setMensaje(null)
   }
@@ -126,12 +143,14 @@ export default function Especies() {
           tipo,
           moneda,
           fecha_vto:   formNueva.fecha_vto || null,
+          sector:      formNueva.sector || null,
+          riesgo:      formNueva.riesgo || null,
         }),
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.error || 'Error al agregar')
       setMensaje({ tipo: 'ok', texto: `Especie ${ticker.toUpperCase()} agregada correctamente` })
-      setFormNueva({ ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: '' })
+      setFormNueva({ ticker: '', descripcion: '', tipo: 'bono_usd', moneda: 'USD', fecha_vto: '', sector: '', riesgo: '' })
       cargar()
     } catch (e) {
       setMensaje({ tipo: 'error', texto: e.message })
@@ -235,6 +254,26 @@ export default function Especies() {
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
             />
           </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Sector</label>
+            <select
+              value={formNueva.sector}
+              onChange={e => setFormNueva(f => ({ ...f, sector: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            >
+              {SECTORES.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 block mb-1">Riesgo</label>
+            <select
+              value={formNueva.riesgo}
+              onChange={e => setFormNueva(f => ({ ...f, riesgo: e.target.value }))}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            >
+              {RIESGOS.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
+            </select>
+          </div>
           <button
             onClick={agregarEspecie}
             disabled={agregando}
@@ -264,7 +303,7 @@ export default function Especies() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['Ticker', 'Descripción', 'Tipo', 'Moneda', 'Vencimiento', 'Activo', 'Seguimiento', ''].map(h => (
+                {['Ticker', 'Descripción', 'Tipo', 'Moneda', 'Vencimiento', 'Clasif.', 'Activo', 'Seguimiento', ''].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -290,6 +329,16 @@ export default function Especies() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">
                       {esp.fecha_vto ? new Date(esp.fecha_vto + 'T12:00:00').toLocaleDateString('es-AR') : '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        {esp.sector
+                          ? <span className="text-[10px] px-1.5 rounded bg-slate-100 text-slate-600">{SECTORES.find(s => s.v === esp.sector)?.l || esp.sector}</span>
+                          : <span className="text-[10px] text-gray-300">sin sector</span>}
+                        {esp.riesgo
+                          ? <span className="text-[10px] px-1.5 rounded bg-amber-50 text-amber-700">{RIESGOS.find(r => r.v === esp.riesgo)?.l || esp.riesgo}</span>
+                          : <span className="text-[10px] text-gray-300">sin riesgo</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${esp.activo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
@@ -324,7 +373,7 @@ export default function Especies() {
                   {/* Fila de edición inline */}
                   {editando === esp.ticker && (
                     <tr className="bg-indigo-50">
-                      <td colSpan={8} className="px-4 py-4">
+                      <td colSpan={9} className="px-4 py-4">
                         <div className="flex flex-wrap gap-4 items-end">
                           <div>
                             <label className="text-xs text-gray-500 block mb-1">Descripción</label>
@@ -367,6 +416,26 @@ export default function Especies() {
                               onChange={e => setForm(f => ({ ...f, fecha_vto: e.target.value }))}
                               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 bg-white"
                             />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 block mb-1">Sector</label>
+                            <select
+                              value={form.sector || ''}
+                              onChange={e => setForm(f => ({ ...f, sector: e.target.value }))}
+                              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 bg-white"
+                            >
+                              {SECTORES.map(s => <option key={s.v} value={s.v}>{s.l}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500 block mb-1">Riesgo</label>
+                            <select
+                              value={form.riesgo || ''}
+                              onChange={e => setForm(f => ({ ...f, riesgo: e.target.value }))}
+                              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400 bg-white"
+                            >
+                              {RIESGOS.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
+                            </select>
                           </div>
                           <div className="flex gap-2">
                             <button
