@@ -706,18 +706,29 @@ export default function Cartera() {
                             }
                             const c = colores[ep.nivel]
                             const fechaTxt = new Date(String(item.fecha_precio).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')
+                            const esManual = (item.fuente || '').toLowerCase().includes('manual')
                             return (
-                              <span className="inline-flex items-center gap-1">
-                                <span className="text-xs px-2 py-1 rounded-full font-medium inline-flex items-center gap-1"
-                                  style={{ backgroundColor: c.bg, color: c.tx }}
-                                  title={ep.nivel === 'ok' ? 'Precio actualizado' : `Desactualizado hace ${ep.habiles} día(s) hábil(es)`}>
-                                  {c.label} {fechaTxt}
+                              <div className="flex flex-col gap-0.5">
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="text-xs px-2 py-1 rounded-full font-medium inline-flex items-center gap-1"
+                                    style={{ backgroundColor: c.bg, color: c.tx }}
+                                    title={ep.nivel === 'ok' ? 'Precio actualizado' : `Desactualizado hace ${ep.habiles} día(s) hábil(es)`}>
+                                    {c.label} {fechaTxt}
+                                  </span>
+                                  {usuario?.rol === 'admin' && (
+                                    <button onClick={(e) => abrirModalPrecio(item, e)}
+                                      className="text-gray-300 hover:text-indigo-500 text-xs" title="Cargar precio manual">✏️</button>
+                                  )}
                                 </span>
-                                {usuario?.rol === 'admin' && (
-                                  <button onClick={(e) => abrirModalPrecio(item, e)}
-                                    className="text-gray-300 hover:text-indigo-500 text-xs" title="Cargar precio manual">✏️</button>
+                                {item.fuente && (
+                                  <span className="text-[10px] px-1.5 rounded"
+                                    style={esManual
+                                      ? { backgroundColor: '#ede9fe', color: '#7c3aed' }
+                                      : { color: '#cbd5e1' }}>
+                                    {esManual ? '✎ manual' : item.fuente}
+                                  </span>
                                 )}
-                              </span>
+                              </div>
                             )
                           })()}
                         </td>
