@@ -358,6 +358,10 @@ export default function Cartera() {
   const [estadoCierre, setEstadoCierre] = useState('')
   const [mostrarInformes, setMostrarInformes] = useState(false)
   const [dolar, setDolar] = useState(null)
+  // Carga manual de precio
+  const [modalPrecio, setModalPrecio] = useState(null)  // ticker en edición
+  const [formPrecio, setFormPrecio] = useState({ fecha: '', precio_ars: '', precio_usd: '', tir: '', duration: '', volumen: '' })
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false)
 
   // Nombres amigables de tipos de dólar
   const NOMBRE_DOLAR = {
@@ -395,6 +399,47 @@ export default function Cartera() {
 
   const verDetalle = (item) => {
     setSeleccionado(prev => prev?.ticker === item.ticker ? null : item)
+  }
+
+  // Abrir modal de carga manual, precargando lo que haya
+  const abrirModalPrecio = (item, e) => {
+    if (e) e.stopPropagation()
+    const hoy = new Date().toISOString().split('T')[0]
+    setFormPrecio({
+      fecha: hoy,
+      precio_ars: item.precio_cierre_ars || '',
+      precio_usd: item.precio_cierre_usd || '',
+      tir: item.tir || '',
+      duration: item.duration || '',
+      volumen: '',
+    })
+    setModalPrecio(item.ticker)
+  }
+
+  const guardarPrecioManual = async () => {
+    setGuardandoPrecio(true)
+    try {
+      const res = await authFetch('/api/cartera/precio-manual', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticker: modalPrecio,
+          fecha: formPrecio.fecha,
+          precio_ars: formPrecio.precio_ars || null,
+          precio_usd: formPrecio.precio_usd || null,
+          tir: formPrecio.tir || null,
+          duration: formPrecio.duration || null,
+          volumen: formPrecio.volumen || null,
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Error')
+      setModalPrecio(null)
+      cargar()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setGuardandoPrecio(false)
+    }
   }
 
   const sort = (col) => {
@@ -644,7 +689,15 @@ export default function Cartera() {
                           {(() => {
                             const ep = estadoPrecio(item.fecha_precio)
                             if (ep.nivel === 'sin') {
-                              return <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Sin precio</span>
+                              return (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700 font-semibold">Sin precio</span>
+                                  {usuario?.rol === 'admin' && (
+                                    <button onClick={(e) => abrirModalPrecio(item, e)}
+                                      className="text-gray-300 hover:text-indigo-500 text-xs" title="Cargar precio manual">✏️</button>
+                                  )}
+                                </span>
+                              )
                             }
                             const colores = {
                               ok:     { bg: 'transparent', tx: '#9ca3af', label: '' },
@@ -654,10 +707,16 @@ export default function Cartera() {
                             const c = colores[ep.nivel]
                             const fechaTxt = new Date(String(item.fecha_precio).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')
                             return (
-                              <span className="text-xs px-2 py-1 rounded-full font-medium inline-flex items-center gap-1"
-                                style={{ backgroundColor: c.bg, color: c.tx }}
-                                title={ep.nivel === 'ok' ? 'Precio actualizado' : `Desactualizado hace ${ep.habiles} día(s) hábil(es)`}>
-                                {c.label} {fechaTxt}
+                              <span className="inline-flex items-center gap-1">
+                                <span className="text-xs px-2 py-1 rounded-full font-medium inline-flex items-center gap-1"
+                                  style={{ backgroundColor: c.bg, color: c.tx }}
+                                  title={ep.nivel === 'ok' ? 'Precio actualizado' : `Desactualizado hace ${ep.habiles} día(s) hábil(es)`}>
+                                  {c.label} {fechaTxt}
+                                </span>
+                                {usuario?.rol === 'admin' && (
+                                  <button onClick={(e) => abrirModalPrecio(item, e)}
+                                    className="text-gray-300 hover:text-indigo-500 text-xs" title="Cargar precio manual">✏️</button>
+                                )}
                               </span>
                             )
                           })()}
@@ -680,6 +739,73 @@ export default function Cartera() {
           />
         )}
       </div>
+
+      {/* Modal de carga manual de precio */}
+      {modalPrecio && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setModalPrecio(null)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-800">Cargar precio: {modalPrecio}</h3>
+              <button onClick={() => setModalPrecio(null)} className="text-gray-300 hover:text-gray-500">✕</button>
+            </div>
+            <p className="text-xs text-gray-400">
+              Carga manual (fuente: manual). Ingresá al menos un precio. La otra moneda se completa con el TC si la dejás vacía.
+            </p>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Fecha de cotización *</label>
+              <input type="date" value={formPrecio.fecha} onChange={e => setFormPrecio(f => ({ ...f, fecha: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Precio ARS</label>
+                <input type="number" step="any" value={formPrecio.precio_ars} onChange={e => setFormPrecio(f => ({ ...f, precio_ars: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Precio USD</label>
+                <input type="number" step="any" value={formPrecio.precio_usd} onChange={e => setFormPrecio(f => ({ ...f, precio_usd: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">TIR %</label>
+                <input type="number" step="any" value={formPrecio.tir} onChange={e => setFormPrecio(f => ({ ...f, tir: e.target.value }))}
+                  placeholder="0.00"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Duration</label>
+                <input type="number" step="any" value={formPrecio.duration} onChange={e => setFormPrecio(f => ({ ...f, duration: e.target.value }))}
+                  placeholder="años"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Volumen</label>
+                <input type="number" step="any" value={formPrecio.volumen} onChange={e => setFormPrecio(f => ({ ...f, volumen: e.target.value }))}
+                  placeholder="opc."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setModalPrecio(null)}
+                className="flex-1 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancelar</button>
+              <button onClick={guardarPrecioManual} disabled={guardandoPrecio}
+                className="flex-1 py-2 text-sm text-white rounded-lg disabled:opacity-60" style={{ backgroundColor: '#4F6EF7' }}>
+                {guardandoPrecio ? 'Guardando...' : 'Guardar precio'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
