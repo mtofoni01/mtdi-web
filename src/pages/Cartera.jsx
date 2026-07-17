@@ -9,6 +9,20 @@ function fmt(n, dec = 0) {
 
 // Evalúa la frescura del precio: días de antigüedad y estado de alerta.
 // Considera solo días hábiles aproximados (fin de semana no cuenta como atraso).
+// Etiquetas de sector y riesgo (clasificación de especies)
+const SECTOR_LABELS = {
+  publico_nacional:   'Púb. Nacional',
+  publico_provincial: 'Púb. Provincial',
+  publico_otros:      'Púb. Otros',
+  privado:            'Privado',
+  mixto:              'Mixto',
+}
+const RIESGO_LABELS = {
+  argentina:  'Argentina',
+  externo:    'Externo',
+  emergentes: 'Emergentes',
+}
+
 function estadoPrecio(fechaPrecio) {
   if (!fechaPrecio) return { dias: null, nivel: 'sin', texto: 'Sin precio' }
   const f = new Date(String(fechaPrecio).split('T')[0] + 'T12:00:00')
@@ -362,6 +376,10 @@ export default function Cartera() {
   const [modalPrecio, setModalPrecio] = useState(null)  // ticker en edición
   const [formPrecio, setFormPrecio] = useState({ fecha: '', precio_ars: '', precio_usd: '', tir: '', duration: '', volumen: '' })
   const [guardandoPrecio, setGuardandoPrecio] = useState(false)
+  // Modal de clasificación (sector / riesgo)
+  const [modalClasif, setModalClasif] = useState(null)  // item en edición
+  const [formClasif, setFormClasif] = useState({ sector: '', riesgo: '' })
+  const [guardandoClasif, setGuardandoClasif] = useState(false)
 
   // Nombres amigables de tipos de dólar
   const NOMBRE_DOLAR = {
@@ -439,6 +457,31 @@ export default function Cartera() {
       alert(e.message)
     } finally {
       setGuardandoPrecio(false)
+    }
+  }
+
+  // ── Clasificación (sector / riesgo) ──
+  const abrirModalClasif = (item, e) => {
+    if (e) e.stopPropagation()
+    setFormClasif({ sector: item.sector || '', riesgo: item.riesgo || '' })
+    setModalClasif(item)
+  }
+
+  const guardarClasif = async () => {
+    setGuardandoClasif(true)
+    try {
+      const res = await authFetch(`/api/cartera/especies/${modalClasif.ticker}/clasificacion`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sector: formClasif.sector || null, riesgo: formClasif.riesgo || null }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Error')
+      setModalClasif(null)
+      cargar()
+    } catch (e) {
+      alert(e.message)
+    } finally {
+      setGuardandoClasif(false)
     }
   }
 
@@ -621,6 +664,7 @@ export default function Cartera() {
                     <Th col="duration"           label="MD" />
                     <Th col="volumen_operado"    label="Volumen" />
                     <Th col="custodio_nombre"    label="Custodio" />
+                    <Th col="sector"             label="Clasif." />
                     <Th col="fecha_precio"       label="Actualizado" />
                   </tr>
                 </thead>
@@ -686,6 +730,22 @@ export default function Cartera() {
                         <td className="px-4 py-3 text-xs text-gray-400">{abreviarVol(item.volumen_operado)}</td>
                         <td className="px-4 py-3 text-xs text-gray-500">{item.custodio_nombre || '-'}</td>
                         <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <div className="flex flex-col gap-0.5">
+                              {item.sector
+                                ? <span className="text-[10px] px-1.5 rounded bg-slate-100 text-slate-600">{SECTOR_LABELS[item.sector] || item.sector}</span>
+                                : <span className="text-[10px] text-gray-300">sin sector</span>}
+                              {item.riesgo
+                                ? <span className="text-[10px] px-1.5 rounded bg-amber-50 text-amber-700">{RIESGO_LABELS[item.riesgo] || item.riesgo}</span>
+                                : <span className="text-[10px] text-gray-300">sin riesgo</span>}
+                            </div>
+                            {usuario?.rol === 'admin' && (
+                              <button onClick={(e) => abrirModalClasif(item, e)}
+                                className="text-gray-300 hover:text-indigo-500 text-xs" title="Clasificar sector/riesgo">🏷️</button>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
                           {(() => {
                             const ep = estadoPrecio(item.fecha_precio)
                             if (ep.nivel === 'sin') {
@@ -750,6 +810,53 @@ export default function Cartera() {
           />
         )}
       </div>
+
+      {/* Modal de clasificación (sector / riesgo) */}
+      {modalClasif && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setModalClasif(null)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-800">Clasificar: {modalClasif.ticker}</h3>
+              <button onClick={() => setModalClasif(null)} className="text-gray-300 hover:text-gray-500">✕</button>
+            </div>
+            <p className="text-xs text-gray-400">{modalClasif.descripcion}</p>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Sector</label>
+              <select value={formClasif.sector} onChange={e => setFormClasif(f => ({ ...f, sector: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">Sin clasificar</option>
+                <option value="publico_nacional">Público Nacional</option>
+                <option value="publico_provincial">Público Provincial</option>
+                <option value="publico_otros">Público Otros</option>
+                <option value="privado">Privado</option>
+                <option value="mixto">Mixto</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Riesgo</label>
+              <select value={formClasif.riesgo} onChange={e => setFormClasif(f => ({ ...f, riesgo: e.target.value }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">Sin clasificar</option>
+                <option value="argentina">Argentina</option>
+                <option value="externo">Externo</option>
+                <option value="emergentes">Emergentes</option>
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setModalClasif(null)}
+                className="flex-1 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Cancelar</button>
+              <button onClick={guardarClasif} disabled={guardandoClasif}
+                className="flex-1 py-2 text-sm text-white rounded-lg disabled:opacity-60" style={{ backgroundColor: '#4F6EF7' }}>
+                {guardandoClasif ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de carga manual de precio */}
       {modalPrecio && (
