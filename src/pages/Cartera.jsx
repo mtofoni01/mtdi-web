@@ -58,6 +58,7 @@ const colorTipo = (tipo) => {
     on: '#2c5f8a', fci_mm: '#6c3fc5', fci_rf: '#5a32a8',
     fci_rv: '#7d1fa8', fci_mix: '#8a3fc5', accion: '#c5183c',
     cedear: '#a8142e', plazo_fijo_ars: '#b5700a', plazo_fijo_usd: '#8a5200',
+    ff: '#34495e',
   }
   return map[tipo] || '#555'
 }
@@ -69,6 +70,7 @@ const COLORES_TIPO = {
   on:             '#16a085', fci_mm:         '#6c3fc5', fci_rf:    '#5a32a8',
   fci_rv:         '#7d1fa8', fci_mix:        '#8a3fc5', accion:    '#c5183c',
   cedear:         '#a8142e', plazo_fijo_ars: '#b5700a', plazo_fijo_usd: '#8a5200',
+  ff:             '#34495e',
 }
 const COLORES_MONEDA  = { ARS: '#e67e22', USD: '#1a6eb5' }
 const COLORES_CUSTODIO = ['#4F6EF7','#27ae60','#e67e22','#8e44ad','#e74c3c','#16a085','#f39c12','#2980b9']
@@ -79,6 +81,7 @@ const LABEL_TIPO = {
   on: 'ON', fci_mm: 'FCI MM', fci_rf: 'FCI RF', fci_rv: 'FCI RV',
   fci_mix: 'FCI Mix', accion: 'Acción', cedear: 'CEDEAR',
   plazo_fijo_ars: 'PF ARS', plazo_fijo_usd: 'PF USD',
+  ff: 'Fideicomiso',
 }
 
 const fmtTooltip = (value) => `$${parseFloat(value || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`

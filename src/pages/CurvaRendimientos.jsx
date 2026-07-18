@@ -10,6 +10,7 @@ const COLORES_TIPO = {
   letra_ars: '#e74c3c',
   letra_usd: '#2980b9',
   on:        '#16a085',
+  ff:        '#34495e',
 }
 
 const LABEL_TIPO = {
@@ -20,6 +21,7 @@ const LABEL_TIPO = {
   letra_ars: 'LECAP',
   letra_usd: 'LETE',
   on:        'ON',
+  ff:        'Fideicomiso',
 }
 
 // ── Regresión lineal grado 1 (para 2 puntos) ──────────────────────

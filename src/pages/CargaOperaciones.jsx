@@ -9,7 +9,7 @@ function fmt(n, dec = 2) {
 // Tipos de especie que son títulos/valores negociables (excluye FCI, PF, cauciones, etc.)
 const TIPOS_TITULO = [
   'bono_usd', 'bono_ars', 'bono_cer', 'bono_dv',
-  'letra_ars', 'letra_usd', 'on', 'accion', 'cedear',
+  'letra_ars', 'letra_usd', 'on', 'ff', 'accion', 'cedear',
 ]
 
 // Los que cotizan por unidad (no cada 100 VN)

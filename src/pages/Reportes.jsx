@@ -22,6 +22,7 @@ const ORDEN_GRUPO = {
   'FCI': 2,
   'Plazos fijos': 3,
   'Cauciones': 4,
+  'Fideicomisos financieros': 4.5,
   'Renta variable': 5,
   'Renta fija': 6,
 }

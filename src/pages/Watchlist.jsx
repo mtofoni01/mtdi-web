@@ -7,6 +7,9 @@ function fmt(n, dec = 0) {
   return parseFloat(n || 0).toLocaleString('es-AR', { maximumFractionDigits: dec })
 }
 
+// Override de etiquetas de tipo (el resto usa el nombre crudo con guiones→espacio)
+const LABEL_TIPO = { ff: 'Fideicomiso' }
+
 export default function Watchlist() {
   const { authFetch } = useAuth()
   const [watchlist, setWatchlist]       = useState([])
@@ -67,7 +70,7 @@ export default function Watchlist() {
                       <span className="text-xs font-bold text-white px-2 py-1 rounded bg-indigo-500">{item.ticker}</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{item.descripcion}</td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{item.tipo?.replace('_', ' ')}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{LABEL_TIPO[item.tipo] || item.tipo?.replace(/_/g, ' ')}</td>
                     <td className="px-4 py-3 text-sm font-semibold">{item.precio_cierre_ars ? `$${fmt(item.precio_cierre_ars)}` : '-'}</td>
                     <td className="px-4 py-3 text-sm">USD {item.precio_cierre_usd ? parseFloat(item.precio_cierre_usd).toFixed(2) : '-'}</td>
                     <td className="px-4 py-3 text-sm font-semibold" style={{ color: '#b5700a' }}>{item.tir ? `${parseFloat(item.tir).toFixed(2)}%` : '-'}</td>
