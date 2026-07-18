@@ -86,6 +86,7 @@ export default function Reportes() {
   const [cargando, setCargando]   = useState(true)
   const [fechaCierre, setFechaCierre] = useState(null)
   const [tc, setTc]               = useState(null)
+  const [cer, setCer]             = useState(null)  // { valor, fecha } del CER del día (BCRA)
 
   const [fUsuarios, setFUsuarios]   = useState([])
   const [fCustodios, setFCustodios] = useState([])
@@ -102,16 +103,19 @@ export default function Reportes() {
       if (fUsuarios.length)  params.set('usuarios', fUsuarios.join(','))
       if (fCustodios.length) params.set('custodios', fCustodios.join(','))
 
-      const [rRep, rCust] = await Promise.all([
+      const [rRep, rCust, rCer] = await Promise.all([
         authFetch(`/api/cartera/reporte?${params}`),
         authFetch('/api/cartera/custodios'),
+        authFetch('/api/cartera/cer'),
       ])
       const dRep  = await rRep.json()
       const dCust = await rCust.json()
+      const dCer  = await rCer.json()
       setItemsRaw(dRep.data || [])
       setCustodios(dCust.data || [])
       setFechaCierre(dRep.fecha_cierre || null)
       setTc(dRep.tc || null)
+      setCer(dCer.ok ? { valor: dCer.valor, fecha: dCer.fecha_valor } : null)
 
       if (esAdmin) {
         const rU = await authFetch('/api/admin/usuarios')
@@ -316,7 +320,14 @@ export default function Reportes() {
         }
       `}</style>
       <div className="flex items-center justify-between no-print">
-        <h1 className="text-2xl font-bold text-gray-800">📊 Reporte de cartera</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">📊 Reporte de cartera</h1>
+          {cer && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              CER {fmt(cer.valor, 4)} · al {new Date(cer.fecha + 'T12:00:00').toLocaleDateString('es-AR')}
+            </p>
+          )}
+        </div>
         <div className="flex gap-2 no-print">
           <button onClick={() => setVerDetalle(v => !v)}
             className={`px-4 py-2 text-sm rounded-lg border transition-colors ${verDetalle ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
@@ -427,6 +438,7 @@ export default function Reportes() {
               Emitido: {new Date().toLocaleDateString('es-AR')}
               {fechaCierre && ` · Cotizaciones al ${new Date(String(fechaCierre).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}`}
               {tc && ` · TC ${fmt(tc, 2)}`}
+              {cer && ` · CER ${fmt(cer.valor, 4)}`}
             </p>
             {aplicarExp && (
               <p className="text-xs text-gray-500 mt-1">

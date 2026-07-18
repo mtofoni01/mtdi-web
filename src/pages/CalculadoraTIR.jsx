@@ -66,6 +66,7 @@ export default function CalculadoraTIR() {
   const [mensaje, setMensaje]       = useState(null)
   const [tienePosicion, setTienePosicion] = useState(false)
   const [dolar, setDolar] = useState(null)
+  const [cer, setCer] = useState(null)  // CER del día (referencia)
   const [convArs, setConvArs] = useState('')
   const [convUsd, setConvUsd] = useState('')
 
@@ -79,6 +80,10 @@ export default function CalculadoraTIR() {
     authFetch('/api/cartera/dolar')
       .then(r => r.json())
       .then(d => { if (d.ok && d.data) setDolar(d.data) })
+      .catch(() => {})
+    authFetch('/api/cartera/cer')
+      .then(r => r.json())
+      .then(d => setCer(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
       .catch(() => {})
   }, [authFetch])
 
@@ -226,6 +231,16 @@ export default function CalculadoraTIR() {
               {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}
             </span>
           </div>
+          {cer && (
+            <>
+              <div className="h-6 w-px bg-gray-200" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase">CER</span>
+                <span className="text-lg font-bold text-emerald-600">{Number(cer.valor).toFixed(4)}</span>
+                <span className="text-xs text-gray-400">{new Date(cer.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+              </div>
+            </>
+          )}
           <div className="h-6 w-px bg-gray-200" />
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Convertir:</span>

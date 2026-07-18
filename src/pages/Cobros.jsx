@@ -47,6 +47,7 @@ export default function Cobros() {
     custodio_id: '', notas: '', usuario_id: '', deposito_id: null,
   })
   const [importeManual, setImporteManual] = useState(false)
+  const [cerRef, setCerRef] = useState(null)  // CER de la fecha del cobro (referencia)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const cargar = useCallback(async () => {
@@ -87,6 +88,15 @@ export default function Cobros() {
     if (!ia || !co) { set('importe', ''); return }
     set('importe', (ia * co).toFixed(2))
   }, [form.importe_ajuste, form.coef_ajuste, importeManual])
+
+  // CER de la fecha del cobro (referencia para calcular el coeficiente)
+  useEffect(() => {
+    if (!form.fecha) { setCerRef(null); return }
+    authFetch(`/api/cartera/cer?fecha=${form.fecha}`)
+      .then(r => r.json())
+      .then(d => setCerRef(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
+      .catch(() => setCerRef(null))
+  }, [authFetch, form.fecha])
 
   // Precargar el formulario desde un cobro pendiente
   const cobrar = (p) => {
@@ -260,6 +270,11 @@ export default function Cobros() {
                 <input type="number" value={form.coef_ajuste} onChange={e => set('coef_ajuste', e.target.value)}
                   placeholder="1" step="any"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-400" />
+                {cerRef && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    CER al {new Date(cerRef.fecha + 'T12:00:00').toLocaleDateString('es-AR')}: <span className="font-semibold text-gray-600">{Number(cerRef.valor).toFixed(4)}</span>
+                  </p>
+                )}
               </div>
             </div>
             {requiereAjuste && form.importe_ajuste && form.coef_ajuste && (
