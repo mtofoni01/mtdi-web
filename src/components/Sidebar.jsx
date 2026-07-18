@@ -26,6 +26,7 @@ const secciones = [
       { to: '/evolucion',          label: '📈 Evolución', admin: true },
       { to: '/curva-rendimientos', label: '📉 Curva de Rendimientos' },
       { to: '/calculadora-tir',    label: '🧮 Calculadora TIR' },
+      { to: '/cartera-objetivo',   label: '🎯 Cartera Objetivo', admin: true },
     ],
   },
   {
