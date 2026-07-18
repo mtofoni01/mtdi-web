@@ -82,6 +82,44 @@ function BarraRango({ real, piso, optimo, tope, color }) {
   )
 }
 
+// Paleta por índice de categoría (compartida entre óptimo y real de una dimensión)
+const PALETA = ['#4F6EF7', '#16a085', '#e67e22', '#8e44ad', '#e74c3c', '#2980b9', '#f1c40f', '#34495e']
+
+// Torta chica (pie SVG) sin dependencias. datos: [{ valor, color, label }]
+function MiniTorta({ datos, size = 60 }) {
+  const total = datos.reduce((s, d) => s + Math.max(0, n(d.valor)), 0)
+  const r = size / 2
+  if (total <= 0) {
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={r} cy={r} r={r - 1} fill="none" stroke="#e5e7eb" strokeWidth="2" />
+        <text x={r} y={r + 3} textAnchor="middle" fontSize="9" fill="#bbb">s/d</text>
+      </svg>
+    )
+  }
+  let ang = -Math.PI / 2
+  const sectores = datos.map((d, i) => {
+    const val = Math.max(0, n(d.valor))
+    if (val <= 0) return null
+    const frac = val / total
+    const a0 = ang
+    const a1 = ang + frac * 2 * Math.PI
+    ang = a1
+    if (frac >= 0.99999) {
+      return <circle key={i} cx={r} cy={r} r={r} fill={d.color}><title>{`${d.label}: ${val.toFixed(1)}%`}</title></circle>
+    }
+    const x0 = r + r * Math.cos(a0), y0 = r + r * Math.sin(a0)
+    const x1 = r + r * Math.cos(a1), y1 = r + r * Math.sin(a1)
+    const large = frac > 0.5 ? 1 : 0
+    return (
+      <path key={i} d={`M${r},${r} L${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)} Z`} fill={d.color}>
+        <title>{`${d.label}: ${val.toFixed(1)}%`}</title>
+      </path>
+    )
+  })
+  return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{sectores}</svg>
+}
+
 export default function CarteraObjetivo() {
   const { authFetch, usuario } = useAuth()
   const esAdmin = usuario?.rol === 'admin'
@@ -390,15 +428,29 @@ export default function CarteraObjetivo() {
               {DIMENSIONES.map(dim => {
                 const d = comp.dimensiones?.[dim.v]
                 if (!d) return null
+                const dataOpt  = d.filas.map((f, i) => ({ valor: n(f.optimo), color: PALETA[i % PALETA.length], label: LABELS[dim.v]?.[f.categoria] || f.categoria }))
+                const dataReal = d.filas.map((f, i) => ({ valor: n(f.real),   color: PALETA[i % PALETA.length], label: LABELS[dim.v]?.[f.categoria] || f.categoria }))
                 return (
                   <div key={dim.v} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                      <h2 className="font-semibold text-gray-700">{dim.l}</h2>
-                      {d.sin_clasificar > 0 && (
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-                          ⚠️ {d.sin_clasificar.toFixed(1)}% sin clasificar
-                        </span>
-                      )}
+                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <h2 className="font-semibold text-gray-700 truncate">{dim.l}</h2>
+                        {d.sin_clasificar > 0 && (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
+                            ⚠️ {d.sin_clasificar.toFixed(1)}% sin clasificar
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">Óptimo</p>
+                          <MiniTorta datos={dataOpt} />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">Real</p>
+                          <MiniTorta datos={dataReal} />
+                        </div>
+                      </div>
                     </div>
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b border-gray-100">
@@ -412,12 +464,15 @@ export default function CarteraObjetivo() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {d.filas.map(f => {
+                        {d.filas.map((f, i) => {
                           const al = ALERTA[f.alerta] || ALERTA.ok
                           const desvio = f.desvio
                           return (
                             <tr key={f.categoria} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 text-sm text-gray-600">{LABELS[dim.v]?.[f.categoria] || f.categoria}</td>
+                              <td className="px-4 py-2 text-sm text-gray-600">
+                                <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ backgroundColor: PALETA[i % PALETA.length] }} />
+                                {LABELS[dim.v]?.[f.categoria] || f.categoria}
+                              </td>
                               <td className="px-4 py-2">
                                 <BarraRango real={f.real} piso={f.piso} optimo={f.optimo} tope={f.tope} color={al.barra} />
                               </td>
