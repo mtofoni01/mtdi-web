@@ -38,6 +38,8 @@ export default function Evolucion() {
   const [idB, setIdB]           = useState('')  // anterior
   const [comp, setComp]         = useState(null)
   const [comparando, setComparando] = useState(false)
+  const [cerFotos, setCerFotos] = useState(null)  // { cerA, cerB } CER de la foto actual/anterior
+  const [cerPorFecha, setCerPorFecha] = useState({})  // { 'YYYY-MM-DD': valorCER } de todas las fotos
 
   const cargarFotos = useCallback(async () => {
     setCargando(true)
@@ -82,6 +84,57 @@ export default function Evolucion() {
   }, [authFetch, idA, idB])
 
   useEffect(() => { comparar() }, [comparar])
+
+  // CER de la fecha de cada foto (para reexpresar en pesos constantes)
+  useEffect(() => {
+    if (!comp?.anterior?.fecha || !comp?.actual?.fecha) { setCerFotos(null); return }
+    const fA = String(comp.actual.fecha).split('T')[0]
+    const fB = String(comp.anterior.fecha).split('T')[0]
+    Promise.all([
+      authFetch(`/api/cartera/cer?fecha=${fA}`).then(r => r.json()),
+      authFetch(`/api/cartera/cer?fecha=${fB}`).then(r => r.json()),
+    ]).then(([dA, dB]) => {
+      setCerFotos(dA.ok && dB.ok ? { cerA: dA.valor, cerB: dB.valor } : null)
+    }).catch(() => setCerFotos(null))
+  }, [authFetch, comp])
+
+  // Pesos constantes: reexpresa la foto anterior a pesos de la fecha actual (× CER_actual/CER_anterior)
+  const arsConstante = useMemo(() => {
+    if (!comp || !cerFotos || !cerFotos.cerB) return null
+    const factor    = cerFotos.cerA / cerFotos.cerB
+    const antReexpr = parseFloat(comp.anterior.total_ars || 0) * factor
+    const actual    = parseFloat(comp.actual.total_ars || 0)
+    const rel = antReexpr !== 0 ? (actual / antReexpr - 1) * 100 : null
+    return { antReexpr, actual, abs: actual - antReexpr, rel, factor }
+  }, [comp, cerFotos])
+
+  // CER de cada foto (para el gráfico de patrimonio en pesos constantes)
+  useEffect(() => {
+    if (!fotos.length) { setCerPorFecha({}); return }
+    const fechas = [...new Set(fotos.map(f => String(f.fecha).split('T')[0]))]
+    Promise.all(fechas.map(fe =>
+      authFetch(`/api/cartera/cer?fecha=${fe}`).then(r => r.json()).then(d => ({ fe, valor: d.ok ? d.valor : null }))
+    )).then(arr => {
+      const map = {}
+      for (const { fe, valor } of arr) if (valor !== null) map[fe] = valor
+      setCerPorFecha(map)
+    }).catch(() => setCerPorFecha({}))
+  }, [authFetch, fotos])
+
+  // Serie de patrimonio reexpresado a pesos de la foto más reciente (base común)
+  const serieConstante = useMemo(() => {
+    const ord = fotos.slice().sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+    if (ord.length < 2) return []
+    const cerBase = cerPorFecha[String(ord[ord.length - 1].fecha).split('T')[0]]
+    if (!cerBase) return []
+    const out = []
+    for (const f of ord) {
+      const cerF = cerPorFecha[String(f.fecha).split('T')[0]]
+      if (!cerF) return []  // si falta el CER de alguna foto, no se grafica (serie incompleta)
+      out.push({ fecha: fmtFecha(f.fecha), arsConstante: Math.round(parseFloat(f.total_ars || 0) * (cerBase / cerF)) })
+    }
+    return out
+  }, [fotos, cerPorFecha])
 
   const eliminar = async (id) => {
     if (!confirm('¿Eliminar esta foto?')) return
@@ -177,6 +230,17 @@ export default function Evolucion() {
                       <td className="px-4 py-3 text-right text-sm">$ {fmt(comp.actual.total_ars)}</td>
                       <td className="px-4 py-3 text-right text-sm"><Variacion v={comp.variacion.total_ars} /></td>
                     </tr>
+                    {arsConstante && (
+                      <tr>
+                        <td className="px-4 py-3 text-sm text-gray-600"
+                          title={`Foto anterior reexpresada a pesos de la fecha actual usando el CER (factor ${arsConstante.factor.toFixed(4)}). La variación descuenta la inflación medida por el CER.`}>
+                          Total ARS <span className="text-xs text-gray-400">(pesos constantes · CER)</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">$ {fmt(arsConstante.antReexpr)}</td>
+                        <td className="px-4 py-3 text-right text-sm">$ {fmt(arsConstante.actual)}</td>
+                        <td className="px-4 py-3 text-right text-sm"><Variacion v={{ abs: arsConstante.abs, rel: arsConstante.rel }} /></td>
+                      </tr>
+                    )}
                     <tr>
                       <td className="px-4 py-3 text-sm text-gray-600">TIR/TNA prom. pond.</td>
                       <td className="px-4 py-3 text-right text-sm">{fmt(comp.anterior.tir_pond)}%</td>
@@ -249,6 +313,24 @@ export default function Evolucion() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+
+              {/* Patrimonio en pesos constantes (base: foto más reciente, deflactado por CER) */}
+              {serieConstante.length >= 2 && (
+                <div className="bg-white rounded-xl border border-gray-100 p-4 col-span-2">
+                  <p className="text-sm font-semibold text-gray-600 mb-3">
+                    Patrimonio en pesos constantes <span className="text-xs font-normal text-gray-400">(base última foto · deflactado por CER)</span>
+                  </p>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={serieConstante} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="fecha" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 })}M`} />
+                      <Tooltip formatter={v => `$ ${fmt(v)}`} />
+                      <Line type="monotone" dataKey="arsConstante" name="ARS constantes" stroke="#e67e22" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
           )}
           {serie.length === 1 && (
