@@ -10,6 +10,7 @@ const TIPOS_ESPECIE = [
   { v: 'letra_ars',      l: 'Letra ARS (LECAP)' },
   { v: 'letra_usd',      l: 'Letra USD (LETE)' },
   { v: 'on',             l: 'Obligación Negociable' },
+  { v: 'ff',             l: 'Fideicomiso Financiero' },
   { v: 'fci_mm',         l: 'FCI Money Market' },
   { v: 'fci_rf',         l: 'FCI Renta Fija' },
   { v: 'fci_rv',         l: 'FCI Renta Variable' },
