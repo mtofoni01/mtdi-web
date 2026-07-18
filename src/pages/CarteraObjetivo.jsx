@@ -262,7 +262,7 @@ export default function CarteraObjetivo() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">🎯 Cartera Objetivo</h1>
@@ -282,7 +282,7 @@ export default function CarteraObjetivo() {
       )}
 
       {/* Selector de perfil (compartido entre pestañas) */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 max-w-2xl">
         {PERFILES.map(p => (
           <button key={p.v}
             onClick={() => { setPerfil(p.v); setMensaje(null) }}
@@ -432,26 +432,16 @@ export default function CarteraObjetivo() {
                 const dataReal = d.filas.map((f, i) => ({ valor: n(f.real),   color: PALETA[i % PALETA.length], label: LABELS[dim.v]?.[f.categoria] || f.categoria }))
                 return (
                   <div key={dim.v} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <h2 className="font-semibold text-gray-700 truncate">{dim.l}</h2>
-                        {d.sin_clasificar > 0 && (
-                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">
-                            ⚠️ {d.sin_clasificar.toFixed(1)}% sin clasificar
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-4 shrink-0">
-                        <div className="text-center">
-                          <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">Óptimo</p>
-                          <MiniTorta datos={dataOpt} />
-                        </div>
-                        <div className="text-center">
-                          <p className="text-[10px] text-gray-400 mb-0.5 uppercase tracking-wide">Real</p>
-                          <MiniTorta datos={dataReal} />
-                        </div>
-                      </div>
+                    <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                      <h2 className="font-semibold text-gray-700">{dim.l}</h2>
+                      {d.sin_clasificar > 0 && (
+                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
+                          ⚠️ {d.sin_clasificar.toFixed(1)}% sin clasificar
+                        </span>
+                      )}
                     </div>
+                    <div className="flex flex-col xl:flex-row">
+                      <div className="flex-1 overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b border-gray-100">
                         <tr>
@@ -490,6 +480,18 @@ export default function CarteraObjetivo() {
                         })}
                       </tbody>
                     </table>
+                      </div>
+                      <div className="xl:w-64 shrink-0 border-t xl:border-t-0 xl:border-l border-gray-100 p-4 flex flex-wrap xl:flex-col gap-6 items-center justify-center">
+                        <div className="text-center">
+                          <p className="text-[11px] text-gray-400 mb-1 uppercase tracking-wide">Óptimo</p>
+                          <MiniTorta size={150} datos={dataOpt} />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[11px] text-gray-400 mb-1 uppercase tracking-wide">Real</p>
+                          <MiniTorta size={150} datos={dataReal} />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )
               })}
