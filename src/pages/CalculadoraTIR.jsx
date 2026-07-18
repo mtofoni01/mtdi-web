@@ -65,40 +65,48 @@ export default function CalculadoraTIR() {
   const [guardando, setGuardando]   = useState(false)
   const [mensaje, setMensaje]       = useState(null)
   const [tienePosicion, setTienePosicion] = useState(false)
-  const [dolar, setDolar] = useState(null)
-  const [cer, setCer] = useState(null)  // CER del día (referencia)
+  const hoyISO = new Date().toISOString().split('T')[0]
+  // Conversor TC (ARS ⇄ USD)
+  const [fechaTc, setFechaTc] = useState(hoyISO)
+  const [tcData, setTcData]   = useState(null)  // { valor, tipo, fecha }
   const [convArs, setConvArs] = useState('')
   const [convUsd, setConvUsd] = useState('')
+  // Conversor CER (monto base ⇄ ajustado)
+  const [fechaCer, setFechaCer] = useState(hoyISO)
+  const [cerData, setCerData]   = useState(null)  // { valor, fecha }
+  const [montoBase, setMontoBase]         = useState('')
+  const [montoAjustado, setMontoAjustado] = useState('')
 
   const NOMBRE_DOLAR = {
     blue: 'Blue', bolsa: 'MEP', oficial: 'Oficial',
     contadoconliqui: 'CCL', mayorista: 'Mayorista', cripto: 'Cripto',
   }
 
-  // Cargar el TC de valuación
+  // TC de la fecha seleccionada
   useEffect(() => {
-    authFetch('/api/cartera/dolar')
+    authFetch(`/api/cartera/dolar?fecha=${fechaTc}`)
       .then(r => r.json())
-      .then(d => { if (d.ok && d.data) setDolar(d.data) })
-      .catch(() => {})
-    authFetch('/api/cartera/cer')
-      .then(r => r.json())
-      .then(d => setCer(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
-      .catch(() => {})
-  }, [authFetch])
+      .then(d => setTcData(d.ok && d.data ? d.data : null))
+      .catch(() => setTcData(null))
+  }, [authFetch, fechaTc])
 
-  // Conversores (usan el MEP vendedor: lo que pagás para hacerte de USD)
-  const tcCalc = dolar?.valor || null
-  const onArs = (v) => {
-    setConvArs(v)
-    if (tcCalc && v) setConvUsd((parseFloat(v) / tcCalc).toFixed(2))
-    else setConvUsd('')
-  }
-  const onUsd = (v) => {
-    setConvUsd(v)
-    if (tcCalc && v) setConvArs((parseFloat(v) * tcCalc).toFixed(2))
-    else setConvArs('')
-  }
+  // CER de la fecha seleccionada
+  useEffect(() => {
+    authFetch(`/api/cartera/cer?fecha=${fechaCer}`)
+      .then(r => r.json())
+      .then(d => setCerData(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
+      .catch(() => setCerData(null))
+  }, [authFetch, fechaCer])
+
+  // Conversor TC: ARS ⇄ USD al dólar de la fecha elegida
+  const tcCalc = tcData?.valor || null
+  const onArs = (v) => { setConvArs(v); setConvUsd(tcCalc && v ? (parseFloat(v) / tcCalc).toFixed(2) : '') }
+  const onUsd = (v) => { setConvUsd(v); setConvArs(tcCalc && v ? (parseFloat(v) * tcCalc).toFixed(2) : '') }
+
+  // Conversor CER: monto base ⇄ monto ajustado (× CER de la fecha elegida)
+  const cerVal = cerData?.valor || null
+  const onBase = (v) => { setMontoBase(v); setMontoAjustado(cerVal && v ? (parseFloat(v) * cerVal).toFixed(2) : '') }
+  const onAjustado = (v) => { setMontoAjustado(v); setMontoBase(cerVal && v ? (parseFloat(v) / cerVal).toFixed(2) : '') }
 
   // Cargar lista de especies Comafi
   const cargarEspecies = useCallback(async () => {
@@ -221,45 +229,73 @@ export default function CalculadoraTIR() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">🧮 Calculadora TIR</h1>
 
-      {/* TC de referencia + conversor rápido */}
-      {dolar && tcCalc && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500 uppercase">TC {NOMBRE_DOLAR[dolar.tipo] || dolar.tipo || ''}</span>
-            <span className="text-lg font-bold text-indigo-600">${parseFloat(tcCalc).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className="text-xs text-gray-400">
-              {new Date(String(dolar.fecha).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}
-            </span>
+      {/* Conversores: TC (ARS⇄USD) y CER (base⇄ajustado), cada uno con su fecha */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Conversor TC */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold text-gray-500 uppercase whitespace-nowrap">TC {NOMBRE_DOLAR[tcData?.tipo] || tcData?.tipo || ''}</span>
+              {tcData && <span className="text-lg font-bold text-indigo-600">${parseFloat(tcData.valor).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+            </div>
+            <input type="date" value={fechaTc} onChange={e => setFechaTc(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-400" />
           </div>
-          {cer && (
+          {tcData ? (
             <>
-              <div className="h-6 w-px bg-gray-200" />
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-gray-500 uppercase">CER</span>
-                <span className="text-lg font-bold text-emerald-600">{Number(cer.valor).toFixed(4)}</span>
-                <span className="text-xs text-gray-400">{new Date(cer.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 block mb-1">ARS</label>
+                  <input type="number" value={convArs} onChange={e => onArs(e.target.value)} placeholder="0" step="any"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-400" />
+                </div>
+                <span className="text-gray-300 pb-2">⇄</span>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 block mb-1">USD</label>
+                  <input type="number" value={convUsd} onChange={e => onUsd(e.target.value)} placeholder="0" step="any"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-400" />
+                </div>
               </div>
+              {tcData.fecha && <p className="text-[11px] text-gray-400 mt-2">TC al {new Date(tcData.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</p>}
             </>
+          ) : (
+            <p className="text-xs text-gray-400">Sin TC para esa fecha.</p>
           )}
-          <div className="h-6 w-px bg-gray-200" />
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Convertir:</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-400">ARS</span>
-              <input type="number" value={convArs} onChange={e => onArs(e.target.value)}
-                placeholder="0" step="any"
-                className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-400" />
-            </div>
-            <span className="text-gray-300">⇄</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-400">USD</span>
-              <input type="number" value={convUsd} onChange={e => onUsd(e.target.value)}
-                placeholder="0" step="any"
-                className="w-28 border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-400" />
-            </div>
-          </div>
         </div>
-      )}
+
+        {/* Conversor CER */}
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold text-gray-500 uppercase">CER</span>
+              {cerData && <span className="text-lg font-bold text-emerald-600">{Number(cerData.valor).toFixed(4)}</span>}
+            </div>
+            <input type="date" value={fechaCer} onChange={e => setFechaCer(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-emerald-400" />
+          </div>
+          {cerData ? (
+            <>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 block mb-1">Monto base</label>
+                  <input type="number" value={montoBase} onChange={e => onBase(e.target.value)} placeholder="0" step="any"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
+                </div>
+                <span className="text-gray-300 pb-2">⇄</span>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-400 block mb-1">Ajustado <span className="normal-case">(× CER)</span></label>
+                  <input type="number" value={montoAjustado} onChange={e => onAjustado(e.target.value)} placeholder="0" step="any"
+                    className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-emerald-400" />
+                </div>
+              </div>
+              {cerData.fecha && <p className="text-[11px] text-gray-400 mt-2">CER al {new Date(cerData.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</p>}
+            </>
+          ) : (
+            <p className="text-xs text-gray-400">Sin CER para esa fecha.</p>
+          )}
+        </div>
+      </div>
+
 
       {mensaje && (
         <div className={`px-4 py-3 rounded-lg text-sm border ${mensaje.tipo === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
