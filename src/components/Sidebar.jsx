@@ -39,6 +39,7 @@ const secciones = [
       { to: '/comisiones', label: '💹 Comisiones', admin: true },
       { to: '/custodios',  label: '🏛️ Custodios',  admin: true },
       { to: '/especies',   label: '🏷️ Especies',   admin: true },
+      { to: '/auditoria',  label: '🔎 Auditoría',   admin: true },
     ],
   },
 ]

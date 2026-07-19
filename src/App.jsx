@@ -11,6 +11,7 @@ import Watchlist from './pages/Watchlist'
 import CurvaRendimientos from './pages/CurvaRendimientos'
 import CalculadoraTIR from './pages/CalculadoraTIR'
 import FlujosManuales from './pages/FlujosManuales'
+import Auditoria from './pages/Auditoria'
 import CarteraObjetivo from './pages/CarteraObjetivo'
 import Depositos from './pages/Depositos'
 import MovimientosCaja from './pages/MovimientosCaja'
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="comisiones"          element={<Comisiones />} />
             <Route path="custodios"           element={<Custodios />} />
             <Route path="especies"            element={<Especies />} />
+            <Route path="auditoria"           element={<Auditoria />} />
           </Route>
           <Route path="*" element={<Navigate to="/cartera" replace />} />
         </Routes>
