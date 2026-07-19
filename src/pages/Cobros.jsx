@@ -48,6 +48,8 @@ export default function Cobros() {
   })
   const [importeManual, setImporteManual] = useState(false)
   const [cerRef, setCerRef] = useState(null)  // CER de la fecha del cobro (referencia)
+  const [cerHoy, setCerHoy] = useState(null)  // CER de la consulta (hoy), para valuar los flujos en CER
+  const [tcHoy, setTcHoy]   = useState(null)  // TC de la consulta (hoy), para valuar los flujos dollar-linked
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const cargar = useCallback(async () => {
@@ -97,6 +99,22 @@ export default function Cobros() {
       .then(d => setCerRef(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
       .catch(() => setCerRef(null))
   }, [authFetch, form.fecha])
+
+  // CER de la consulta (hoy): con él se valúan a pesos los flujos expresados en CER
+  useEffect(() => {
+    authFetch('/api/cartera/cer')
+      .then(r => r.json())
+      .then(d => setCerHoy(d.ok ? { valor: d.valor, fecha: d.fecha_valor } : null))
+      .catch(() => setCerHoy(null))
+  }, [authFetch])
+
+  // TC de la consulta (hoy): con él se valúan a pesos los flujos dollar-linked
+  useEffect(() => {
+    authFetch('/api/cartera/dolar')
+      .then(r => r.json())
+      .then(d => setTcHoy(d.ok && d.data ? { valor: d.data.valor, fecha: d.data.fecha } : null))
+      .catch(() => setTcHoy(null))
+  }, [authFetch])
 
   // Precargar el formulario desde un cobro pendiente
   const cobrar = (p) => {
@@ -167,8 +185,24 @@ export default function Cobros() {
     })
   }, [pendientes, verTodos])
 
-  // Totales proyectados por moneda
+  // Flujos expresados en cantidad de CER (bonos CER): se valúan × CER de la consulta
+  const esCer = (p) => p.moneda_ajuste === 'CER'
+  const importeCerArs = (p) => cerHoy ? parseFloat(p.importe_ajuste || 0) * cerHoy.valor : null
+
+  // Flujos dollar-linked (cantidad en USD, pagan en pesos): se valúan × TC de la consulta
+  const esDL = (p) => p.requiere_ajuste && p.moneda_ajuste !== 'CER'
+  const importeDlArs = (p) => tcHoy ? parseFloat(p.importe_ajuste || 0) * tcHoy.valor : null
+
+  // Totales proyectados por moneda (+ totales CER→ARS y DL→ARS con los índices de hoy)
   const totales = pendientesVisibles.reduce((acc, p) => {
+    if (esCer(p)) {
+      if (cerHoy) acc['CER→ARS'] = (acc['CER→ARS'] || 0) + parseFloat(p.importe_ajuste || 0) * cerHoy.valor
+      return acc
+    }
+    if (esDL(p)) {
+      if (tcHoy) acc['DL→ARS'] = (acc['DL→ARS'] || 0) + parseFloat(p.importe_ajuste || 0) * tcHoy.valor
+      return acc
+    }
     const m = p.moneda_cobro || 'ARS'
     if (!acc[m]) acc[m] = 0
     acc[m] += parseFloat(p.importe_ajuste || 0) * (p.requiere_ajuste ? 0 : 1)
@@ -363,12 +397,27 @@ export default function Cobros() {
         {/* Totales */}
         {Object.keys(totales).length > 0 && (
           <div className="flex gap-4 mb-3">
-            {Object.entries(totales).map(([m, v]) => v > 0 && (
-              <div key={m} className="bg-white rounded-xl border border-gray-100 px-5 py-3">
-                <p className="text-xs text-gray-400">A cobrar {m}</p>
-                <p className="text-lg font-bold text-green-600">+ {m} {fmt(v)}</p>
-              </div>
-            ))}
+            {Object.entries(totales).map(([m, v]) => {
+              if (v <= 0) return null
+              const esEstim = m === 'CER→ARS' || m === 'DL→ARS'
+              const label = m === 'CER→ARS' ? 'CER → ARS' : m === 'DL→ARS' ? 'Dólar Linked → ARS' : m
+              return (
+                <div key={m} className="bg-white rounded-xl border border-gray-100 px-5 py-3">
+                  <p className="text-xs text-gray-400">
+                    A cobrar {label}
+                    {m === 'CER→ARS' && cerHoy && (
+                      <span className="text-gray-300"> · CER {Number(cerHoy.valor).toFixed(2)} al {new Date(cerHoy.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+                    )}
+                    {m === 'DL→ARS' && tcHoy && (
+                      <span className="text-gray-300"> · TC {Number(tcHoy.valor).toFixed(2)} al {new Date(tcHoy.fecha + 'T12:00:00').toLocaleDateString('es-AR')}</span>
+                    )}
+                  </p>
+                  <p className={`text-lg font-bold ${esEstim ? 'text-teal-600' : 'text-green-600'}`}>
+                    {esEstim ? '≈ ARS' : `+ ${m}`} {fmt(v)}
+                  </p>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -415,8 +464,30 @@ export default function Cobros() {
                           {p.requiere_ajuste && <span className="ml-2 text-amber-600">· requiere coef.</span>}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-green-600 whitespace-nowrap">
-                          {p.moneda_ajuste} {fmt(p.importe_ajuste)}
-                          {p.requiere_ajuste && <span className="text-xs text-gray-400"> × coef</span>}
+                          {esCer(p) ? (
+                            cerHoy ? (
+                              <>
+                                <span className="text-teal-600">≈ ARS {fmt(importeCerArs(p))}</span>
+                                <span className="block text-xs text-gray-400 font-normal">CER {fmt(p.importe_ajuste, 4)} × {Number(cerHoy.valor).toFixed(2)}</span>
+                              </>
+                            ) : (
+                              <>{p.moneda_ajuste} {fmt(p.importe_ajuste)} <span className="text-xs text-gray-400">× coef</span></>
+                            )
+                          ) : esDL(p) ? (
+                            tcHoy ? (
+                              <>
+                                <span className="text-teal-600">≈ ARS {fmt(importeDlArs(p))}</span>
+                                <span className="block text-xs text-gray-400 font-normal">USD {fmt(p.importe_ajuste, 4)} × TC {Number(tcHoy.valor).toFixed(2)}</span>
+                              </>
+                            ) : (
+                              <>USD {fmt(p.importe_ajuste)} <span className="text-xs text-gray-400">× TC</span></>
+                            )
+                          ) : (
+                            <>
+                              {p.moneda_ajuste} {fmt(p.importe_ajuste)}
+                              {p.requiere_ajuste && <span className="text-xs text-gray-400"> × coef</span>}
+                            </>
+                          )}
                         </td>
                         {esAdmin && <td className="px-4 py-3 text-xs text-gray-500">{p.usuario_nombre}</td>}
                         <td className="px-4 py-3">
