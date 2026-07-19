@@ -52,6 +52,29 @@ function calcularT(fechaStr) {
   return dias / 365
 }
 
+// Valor presente + duration de los flujos, valuando a una fecha (YYYY-MM-DD).
+// Descuenta solo los flujos futuros a esa fecha, a la tasa tirPct.
+function valuarFlujos(flujos, tirPct, fechaBaseISO) {
+  const r = tirPct / 100
+  const base = fechaBaseISO ? new Date(`${fechaBaseISO}T12:00:00`) : new Date()
+  let precio = 0, sumtVP = 0
+  for (const f of flujos) {
+    const fs = f.fecha
+    if (!fs) continue
+    let dd, mm, yyyy
+    if (fs.includes('/')) { [dd, mm, yyyy] = fs.split('/') }
+    else if (fs.includes('-')) { [yyyy, mm, dd] = fs.split('-') }
+    else continue
+    const t = (new Date(`${yyyy}-${mm}-${dd}T12:00:00`) - base) / (1000 * 60 * 60 * 24) / 365
+    if (t <= 0) continue  // solo flujos futuros a la fecha de valuación
+    const vp = f.total / Math.pow(1 + r, t)
+    precio += vp
+    sumtVP += t * vp
+  }
+  const macaulay = precio > 0 ? sumtVP / precio : 0
+  return { precio, macaulay, modified: macaulay / (1 + r) }
+}
+
 export default function CalculadoraTIR() {
   const { authFetch, token } = useAuth()
   const [especies, setEspecies]     = useState([])
@@ -66,6 +89,11 @@ export default function CalculadoraTIR() {
   const [mensaje, setMensaje]       = useState(null)
   const [tienePosicion, setTienePosicion] = useState(false)
   const hoyISO = new Date().toISOString().split('T')[0]
+  // Valuación técnica (precio + duration a una fecha, descontando a una TIR)
+  const [valTir, setValTir]       = useState('')
+  const [valFecha, setValFecha]   = useState(hoyISO)
+  const [valResult, setValResult] = useState(null)
+  const [cargandoVal, setCargandoVal] = useState(false)
   // Conversor TC (ARS ⇄ USD)
   const [fechaTc, setFechaTc] = useState(hoyISO)
   const [tcData, setTcData]   = useState(null)  // { valor, tipo, fecha }
@@ -185,6 +213,44 @@ export default function CalculadoraTIR() {
       setMensaje({ tipo: 'error', texto: e.message })
     } finally {
       setGuardando(false)
+    }
+  }
+
+  // Valuación técnica: precio + duration a una fecha, descontando a una TIR
+  const valuar = () => {
+    if (!datosBono?.flujos?.length) return
+    const tir = parseFloat(valTir !== '' ? valTir : tirCompra)
+    if (isNaN(tir)) { setMensaje({ tipo: 'error', texto: 'Ingresá una TIR, o calculala con un precio primero.' }); return }
+    const r = valuarFlujos(datosBono.flujos, tir, valFecha)
+    if (r.precio <= 0) { setMensaje({ tipo: 'error', texto: 'No hay flujos futuros a esa fecha.' }); return }
+    setValResult({ ...r, tir })
+    setMensaje(null)
+  }
+
+  const cargarValuacion = async () => {
+    if (!valResult || !ticker) return
+    setCargandoVal(true)
+    setMensaje(null)
+    try {
+      const esUSD = datosBono.moneda === 'USD'
+      const p = Math.round(valResult.precio * 1e4) / 1e4
+      const res = await authFetch('/api/cartera/precio-manual', {
+        method: 'POST',
+        body: JSON.stringify({
+          ticker, fecha: valFecha,
+          precio_ars: esUSD ? null : p,
+          precio_usd: esUSD ? p : null,
+          tir: Math.round(valResult.tir * 1e4) / 1e4,
+          duration: Math.round(valResult.modified * 1e4) / 1e4,
+        }),
+      })
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error)
+      setMensaje({ tipo: 'ok', texto: `Cargado en ${ticker} al ${valFecha}: precio ${p}, duration ${valResult.modified.toFixed(2)}.` })
+    } catch (e) {
+      setMensaje({ tipo: 'error', texto: e.message })
+    } finally {
+      setCargandoVal(false)
     }
   }
 
@@ -453,6 +519,54 @@ export default function CalculadoraTIR() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Valuación técnica */}
+              <div className="bg-white rounded-xl border border-gray-100 p-4">
+                <h3 className="font-semibold text-gray-700 mb-3">
+                  Valuación técnica <span className="text-xs font-normal text-gray-400">(descuenta los flujos futuros a una TIR)</span>
+                </h3>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">TIR %</label>
+                    <input type="number" step="any" value={valTir} onChange={e => setValTir(e.target.value)}
+                      placeholder={tirCompra !== null ? tirCompra.toFixed(2) : '0'}
+                      className="w-28 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-400" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Valuar al</label>
+                    <input type="date" value={valFecha} onChange={e => setValFecha(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-indigo-400" />
+                  </div>
+                  <button onClick={valuar} className="px-4 py-1.5 text-sm text-white rounded-lg" style={{ backgroundColor: '#4F6EF7' }}>
+                    Valuar
+                  </button>
+                  {tirCompra !== null && (
+                    <button onClick={() => setValTir(tirCompra.toFixed(4))} className="text-xs text-indigo-600 underline">
+                      usar TIR calculada ({tirCompra.toFixed(2)}%)
+                    </button>
+                  )}
+                </div>
+                {valResult && (
+                  <div className="mt-4 flex flex-wrap items-end gap-6 border-t border-gray-100 pt-3">
+                    <div>
+                      <p className="text-xs text-gray-400">Precio técnico ({datosBono.moneda}, c/100 VN)</p>
+                      <p className="text-2xl font-bold text-indigo-700">{valResult.precio.toFixed(4)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400">Duration modificada</p>
+                      <p className="text-2xl font-bold text-gray-800">{valResult.modified.toFixed(2)} años</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400">TIR usada</p>
+                      <p className="text-lg font-semibold text-amber-700">{valResult.tir.toFixed(2)}%</p>
+                    </div>
+                    <button onClick={cargarValuacion} disabled={cargandoVal}
+                      className="ml-auto px-4 py-2 text-sm text-white rounded-lg disabled:opacity-60" style={{ backgroundColor: '#28a745' }}>
+                      {cargandoVal ? 'Cargando...' : `💾 Cargar a Cartera (${valFecha})`}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Tabla de flujos */}
