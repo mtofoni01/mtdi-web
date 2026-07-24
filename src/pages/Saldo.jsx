@@ -7,18 +7,32 @@ function fmt(n, dec = 0) {
 
 export default function Saldo() {
   const { authFetch, usuario } = useAuth()
+  const esAdmin = usuario?.rol === 'admin'
+  const [usuarios, setUsuarios]   = useState([])
+  const [usuarioSel, setUsuarioSel] = useState(String(usuario?.id || ''))
   const [saldo, setSaldo]       = useState(null)
   const [cargando, setCargando] = useState(true)
 
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const res  = await authFetch('/api/saldo')
+      const url = usuarioSel && usuarioSel !== String(usuario?.id)
+        ? `/api/saldo?usuario_id=${usuarioSel}`
+        : '/api/saldo'
+      const res  = await authFetch(url)
       const data = await res.json()
       setSaldo(data.data)
     } catch {}
     finally { setCargando(false) }
-  }, [authFetch])
+  }, [authFetch, usuarioSel, usuario])
+
+  useEffect(() => {
+    if (!esAdmin) return
+    authFetch('/api/admin/usuarios')
+      .then(r => r.json())
+      .then(d => setUsuarios(d.usuarios || []))
+      .catch(() => {})
+  }, [authFetch, esAdmin])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -50,7 +64,19 @@ export default function Saldo() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">💰 Mi saldo</h1>
-        <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        <div className="flex items-center gap-2">
+          {esAdmin && usuarios.length > 0 && (
+            <select value={usuarioSel} onChange={e => setUsuarioSel(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+              {usuarios.map(u => (
+                <option key={u.id} value={u.id}>
+                  {(u.nombre || u.email)}{String(u.id) === String(usuario?.id) ? ' (yo)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6">
