@@ -17,6 +17,7 @@ export default function MovimientosCaja() {
   // modo: caja (depósito/extracción) | pase
   const [modo, setModo] = useState('caja')
   const [usuarios, setUsuarios] = useState([])
+  const [especiesVista, setEspeciesVista] = useState([])
   const [guardando, setGuardando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
 
@@ -28,6 +29,7 @@ export default function MovimientosCaja() {
     fecha: hoy(),
     notas: '',
     usuario_id: '',
+    especie_ticker: '',   // cuenta a la vista (para depósito/extracción)
   })
 
   // Form pase
@@ -46,6 +48,14 @@ export default function MovimientosCaja() {
     if (!esAdmin) return
     authFetch('/api/admin/usuarios').then(r => r.json()).then(d => setUsuarios(d.usuarios || [])).catch(() => {})
   }, [authFetch, esAdmin])
+
+  // Cuentas a la vista disponibles (especies tipo 'vista')
+  useEffect(() => {
+    authFetch('/api/cartera/especies')
+      .then(r => r.json())
+      .then(d => setEspeciesVista((d.data || []).filter(e => e.tipo === 'vista')))
+      .catch(() => {})
+  }, [authFetch])
 
   // Cálculo del pase
   const monedaDestino = pase.moneda_origen === 'ARS' ? 'USD' : 'ARS'
@@ -73,8 +83,13 @@ export default function MovimientosCaja() {
     setMensaje(null)
     try {
       const op = OPS_CAJA[caja.operacion]
+      const esVista = ['deposito_saldo', 'extraccion_saldo'].includes(caja.operacion)
+      if (esVista && !caja.especie_ticker) {
+        setGuardando(false)
+        return setMensaje({ tipo: 'error', texto: 'Elegí la cuenta a la vista' })
+      }
       const body = {
-        ticker: 'CAJA',
+        ticker: esVista ? caja.especie_ticker : 'CAJA',
         tipo_op: op.tipo_op,
         fecha: caja.fecha,
         vn_cantidad: 0,
@@ -230,6 +245,20 @@ export default function MovimientosCaja() {
               </div>
             )}
           </div>
+
+          {['deposito_saldo', 'extraccion_saldo'].includes(caja.operacion) && (
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Cuenta a la vista *</label>
+              <select value={caja.especie_ticker} onChange={e => setC('especie_ticker', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="">Elegí la cuenta...</option>
+                {especiesVista.map(e => <option key={e.id} value={e.ticker}>{e.ticker} — {e.descripcion} ({e.moneda})</option>)}
+              </select>
+              {especiesVista.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">No hay cuentas a la vista creadas. Creá una especie tipo "vista" en Especies (ej. CCBLP).</p>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Notas</label>
