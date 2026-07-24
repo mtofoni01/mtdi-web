@@ -11,6 +11,10 @@ export default function Usuarios() {
   const [presARS, setPresARS]     = useState('')
   const [presUSD, setPresUSD]     = useState('')
   const [saldos, setSaldos]       = useState({})
+  const [mostrarAlta, setMostrarAlta] = useState(false)
+  const [formAlta, setFormAlta]   = useState({ nombre: '', email: '', password: '', rol: 'usuario' })
+  const [msgAlta, setMsgAlta]     = useState(null)
+  const [creando, setCreando]     = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -42,6 +46,33 @@ export default function Usuarios() {
     } catch {}
   }
 
+  const crearUsuario = async () => {
+    setMsgAlta(null)
+    if (!formAlta.nombre || !formAlta.email || !formAlta.password) {
+      return setMsgAlta({ tipo: 'error', texto: 'Nombre, email y contraseña son obligatorios.' })
+    }
+    if (formAlta.password.length < 8) {
+      return setMsgAlta({ tipo: 'error', texto: 'La contraseña debe tener al menos 8 caracteres.' })
+    }
+    setCreando(true)
+    try {
+      const res = await authFetch('/api/admin/usuarios', {
+        method: 'POST',
+        body: JSON.stringify(formAlta),
+      })
+      const d = await res.json()
+      if (!res.ok || d.error) throw new Error(d.error || 'Error al crear el usuario')
+      setMsgAlta({ tipo: 'ok', texto: `Usuario ${formAlta.email} creado.` })
+      setFormAlta({ nombre: '', email: '', password: '', rol: 'usuario' })
+      setMostrarAlta(false)
+      cargar()
+    } catch (e) {
+      setMsgAlta({ tipo: 'error', texto: e.message })
+    } finally {
+      setCreando(false)
+    }
+  }
+
   const eliminar = async (u) => {
     if (!confirm(`¿Desactivar a ${u.nombre}?`)) return
     try { await authFetch(`/api/admin/usuarios/${u.id}`, { method: 'DELETE' }); cargar() } catch {}
@@ -51,8 +82,59 @@ export default function Usuarios() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">👥 Usuarios</h1>
-        <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        <div className="flex gap-2">
+          <button onClick={() => { setMostrarAlta(v => !v); setMsgAlta(null) }}
+            className="px-4 py-2 text-sm text-white rounded-lg" style={{ backgroundColor: '#2d7d46' }}>
+            {mostrarAlta ? '✕ Cerrar' : '+ Nuevo usuario'}
+          </button>
+          <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
+        </div>
       </div>
+
+      {msgAlta && (
+        <div className={`px-4 py-3 rounded-lg text-sm border ${msgAlta.tipo === 'ok' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+          {msgAlta.tipo === 'ok' ? '✓ ' : '⚠️ '}{msgAlta.texto}
+        </div>
+      )}
+
+      {mostrarAlta && (
+        <div className="bg-white rounded-xl border border-gray-100 p-5">
+          <h2 className="font-semibold text-gray-700 mb-3">Nuevo usuario</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Nombre</label>
+              <input type="text" value={formAlta.nombre} onChange={e => setFormAlta({ ...formAlta, nombre: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Email</label>
+              <input type="email" value={formAlta.email} onChange={e => setFormAlta({ ...formAlta, email: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Contraseña <span className="text-gray-400">(mín. 8)</span></label>
+              <input type="password" value={formAlta.password} onChange={e => setFormAlta({ ...formAlta, password: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Rol</label>
+              <select value={formAlta.rol} onChange={e => setFormAlta({ ...formAlta, rol: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="usuario">Usuario</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <button onClick={crearUsuario} disabled={creando}
+              className="px-5 py-2 text-sm text-white rounded-lg font-semibold disabled:opacity-60" style={{ backgroundColor: '#2d7d46' }}>
+              {creando ? 'Creando...' : 'Crear usuario'}
+            </button>
+            <button onClick={() => { setMostrarAlta(false); setMsgAlta(null) }}
+              className="px-4 py-2 text-sm border border-gray-200 rounded-lg">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {cargando ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"/></div>
