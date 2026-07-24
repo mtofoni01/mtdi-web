@@ -53,7 +53,7 @@ export default function MovimientosCaja() {
   useEffect(() => {
     authFetch('/api/cartera/especies')
       .then(r => r.json())
-      .then(d => setEspeciesVista((d.data || []).filter(e => e.tipo === 'vista')))
+      .then(d => setEspeciesVista((d.data || []).filter(e => e.tipo === 'saldo_vista' && e.ticker !== 'CAJA')))
       .catch(() => {})
   }, [authFetch])
 
