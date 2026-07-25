@@ -136,6 +136,8 @@ export default function CarteraObjetivo() {
   const [comp, setComp]                 = useState(null)
   const [cargandoComp, setCargandoComp] = useState(false)
   const [errorComp, setErrorComp]       = useState(null)
+  const [usuariosLista, setUsuariosLista] = useState([])
+  const [usuarioSel, setUsuarioSel]     = useState('')  // vacío = mi cartera (o todas si admin)
 
   // ── Definición ──────────────────────────────────────────────
   const construirMapa = (data) => {
@@ -183,7 +185,8 @@ export default function CarteraObjetivo() {
     setCargandoComp(true)
     setErrorComp(null)
     try {
-      const res  = await authFetch(`/api/cartera/carteras-objetivo/comparacion?perfil=${perfil}`)
+      const qs = usuarioSel ? `&usuarios=${usuarioSel}` : ''
+      const res  = await authFetch(`/api/cartera/carteras-objetivo/comparacion?perfil=${perfil}${qs}`)
       const json = await res.json()
       if (!json.ok) throw new Error(json.error || 'Error al cargar la comparación')
       setComp(json)
@@ -193,7 +196,12 @@ export default function CarteraObjetivo() {
     } finally {
       setCargandoComp(false)
     }
-  }, [authFetch, perfil])
+  }, [authFetch, perfil, usuarioSel])
+
+  useEffect(() => {
+    if (!esAdmin) return
+    authFetch('/api/admin/usuarios').then(r => r.json()).then(d => setUsuariosLista(d.usuarios || [])).catch(() => {})
+  }, [authFetch, esAdmin])
 
   useEffect(() => {
     if (tab === 'comparacion') cargarComparacion()
@@ -294,6 +302,18 @@ export default function CarteraObjetivo() {
           </button>
         ))}
       </div>
+
+      {/* Selector de usuario (admin, solo en comparación) */}
+      {esAdmin && tab === 'comparacion' && usuariosLista.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-semibold text-gray-500">👤 Cartera de:</label>
+          <select value={usuarioSel} onChange={e => setUsuarioSel(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+            <option value="">Todas</option>
+            {usuariosLista.map(u => <option key={u.id} value={u.id}>{u.nombre || u.email}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Pestañas */}
       <div className="flex gap-1 border-b border-gray-200">

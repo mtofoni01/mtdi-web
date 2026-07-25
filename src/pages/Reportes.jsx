@@ -241,7 +241,8 @@ export default function Reportes() {
   const exportarExcel = async () => {
     try {
       const base = 'https://backend-login-production-6dd0.up.railway.app'
-      const res = await fetch(`${base}/api/cartera/reporte/excel`, {
+      const qs = fechaReporte ? `?fecha=${fechaReporte}` : ''
+      const res = await fetch(`${base}/api/cartera/reporte/excel${qs}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       if (!res.ok) return
@@ -249,7 +250,7 @@ export default function Reportes() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `reporte_cartera_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `reporte_cartera_${fechaReporte || new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(a)
       a.click()
       a.remove()
