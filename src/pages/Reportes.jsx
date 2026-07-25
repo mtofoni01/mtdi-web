@@ -93,6 +93,7 @@ export default function Reportes() {
   const [verDetalle, setVerDetalle] = useState(true)  // toggle detalle por especie
   // Capa 2 — expectativas (tasas comparables). De sesión.
   const [aplicarExp, setAplicarExp] = useState(false)
+  const [fechaReporte, setFechaReporte] = useState('')  // fecha de corte (vacío = hoy)
   const [inflacion, setInflacion]   = useState('')   // % esperado 12m
   const [devaluacion, setDevaluacion] = useState('') // % esperado 12m
 
@@ -102,6 +103,7 @@ export default function Reportes() {
       const params = new URLSearchParams()
       if (fUsuarios.length)  params.set('usuarios', fUsuarios.join(','))
       if (fCustodios.length) params.set('custodios', fCustodios.join(','))
+      if (fechaReporte)      params.set('fecha', fechaReporte)
 
       const [rRep, rCust, rCer] = await Promise.all([
         authFetch(`/api/cartera/reporte?${params}`),
@@ -124,7 +126,7 @@ export default function Reportes() {
       }
     } catch {}
     finally { setCargando(false) }
-  }, [authFetch, esAdmin, fUsuarios, fCustodios])
+  }, [authFetch, esAdmin, fUsuarios, fCustodios, fechaReporte])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -327,6 +329,14 @@ export default function Reportes() {
               CER {fmt(cer.valor, 4)} · al {new Date(cer.fecha + 'T12:00:00').toLocaleDateString('es-AR')}
             </p>
           )}
+          <div className="flex items-center gap-2 mt-2">
+            <label className="text-xs font-semibold text-gray-500">📅 Reporte al:</label>
+            <input type="date" value={fechaReporte} onChange={e => setFechaReporte(e.target.value)}
+              className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-indigo-400" />
+            {fechaReporte
+              ? <button onClick={() => setFechaReporte('')} className="text-xs text-indigo-600 underline">volver a hoy</button>
+              : <span className="text-xs text-gray-400">(hoy)</span>}
+          </div>
         </div>
         <div className="flex gap-2 no-print">
           <button onClick={() => setVerDetalle(v => !v)}
