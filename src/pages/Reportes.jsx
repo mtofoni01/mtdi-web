@@ -97,6 +97,12 @@ export default function Reportes() {
   const [inflacion, setInflacion]   = useState('')   // % esperado 12m
   const [devaluacion, setDevaluacion] = useState('') // % esperado 12m
 
+  // ── Exposición: con qué dólar se expresa la cartera ──────────────
+  // 'base'   = tal como está guardado (el bolsa de la corrida del scraper).
+  // 'manual' = un dólar escrito a mano; la tenencia se reexpresa contra ése.
+  const [tcModo, setTcModo]     = useState('base')
+  const [tcManual, setTcManual] = useState('')
+
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
@@ -136,12 +142,45 @@ export default function Reportes() {
     devaluacion: parseFloat(devaluacion || 0),
   }), [inflacion, devaluacion])
 
-  // Items con tasa efectiva: comparable (si aplicarExp) o pura.
-  // 'tasa' se mantiene como la pura; 'tasaEf' es la que se usa para mostrar/ponderar.
-  const items = useMemo(() => itemsRaw.map(i => ({
-    ...i,
-    tasaEf: aplicarExp ? tasaComparable(i, params) : parseFloat(i.tasa || 0),
-  })), [itemsRaw, aplicarExp, params])
+  // TC de exposición: null = usar lo guardado tal cual.
+  const tcExpo = useMemo(() => {
+    if (tcModo !== 'manual') return null
+    const v = parseFloat(tcManual)
+    return isFinite(v) && v > 0 ? v : null
+  }, [tcModo, tcManual])
+
+  // Items con tasa efectiva + REEXPRESIÓN según el dólar elegido.
+  //
+  //   El precio en PESOS es el dato duro del mercado: no se toca nunca.
+  //   Lo único que cambia es el denominador con el que se mide en dólares.
+  //
+  //   Y la dirección depende de DÓNDE ESTÁ EL DATO DURO. El discriminador
+  //   es `origen`, el mismo que usa el backend para completar la moneda
+  //   faltante (`if (TC && i.origen !== 'posicion')`):
+  //
+  //     'posicion' (bonos, acciones, cedears, ON) -> COTIZA. El precio en
+  //       pesos es el de mercado, aunque la especie sea "en dólares" (un
+  //       AL30 es USD pero cotiza en pesos). El total en PESOS no cambia;
+  //       lo que cambia es cuántos dólares representa.  ->  USD = ARS / TC
+  //
+  //     'deposito' / 'fci' -> NO cotizan: su valuación viene en UNA sola
+  //       moneda, la propia, y la otra se deriva.
+  //          en USD -> ARS = USD × TC     ·     en ARS -> USD = ARS / TC
+  //
+  //   `base_usd` se recalcula también: es el denominador de todas las
+  //   ponderaciones (tasa, plazo, participaciones), así que si no se
+  //   actualizara, los pesos relativos quedarían con el dólar viejo.
+  const items = useMemo(() => itemsRaw.map(i => {
+    const base = { ...i, tasaEf: aplicarExp ? tasaComparable(i, params) : parseFloat(i.tasa || 0) }
+    if (!tcExpo) return base
+    const ars = parseFloat(i.valuacion_ars || 0)
+    const usd = parseFloat(i.valuacion_usd || 0)
+    const cotiza = i.origen === 'posicion'
+    const r = (!cotiza && i.moneda === 'USD')
+      ? { ...base, valuacion_ars: usd * tcExpo }   // el dato duro son los dólares
+      : { ...base, valuacion_usd: ars / tcExpo }   // el dato duro son los pesos
+    return { ...r, base_usd: parseFloat(r.valuacion_usd || 0) }
+  }), [itemsRaw, aplicarExp, params, tcExpo])
 
   const global = useMemo(() => ponderar(items, 'tasaEf'), [items])
   const totalArs = useMemo(() => items.reduce((s, i) => s + parseFloat(i.valuacion_ars || 0), 0), [items])
@@ -427,6 +466,51 @@ export default function Reportes() {
             </div>
           </div>
         </div>
+
+        {/* ── Exposición: con qué dólar se expresa la cartera ───────── */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">
+                Expresar en dólares según
+              </label>
+              <select value={tcModo} onChange={e => setTcModo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400">
+                <option value="base">Dólar de la corrida{tc ? ` · ${fmt(tc, 2)}` : ''}</option>
+                <option value="manual">Otro dólar (a mano)…</option>
+              </select>
+            </div>
+
+            {tcModo === 'manual' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Valor</label>
+                <input type="number" step="0.01" placeholder="0,00" value={tcManual}
+                  onChange={e => setTcManual(e.target.value)}
+                  className="w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+              </div>
+            )}
+
+            {/* Qué dólar se está usando, siempre a la vista */}
+            {tcModo === 'manual' && !tcExpo ? (
+              <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                Falta indicar el valor del dólar
+              </div>
+            ) : (
+              <div className="px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100">
+                <span className="text-xs text-indigo-500 uppercase font-semibold">Dólar aplicado</span>
+                <span className="block text-sm font-bold text-indigo-800">
+                  {tcExpo ? `Manual · ${fmt(tcExpo, 2)}` : `De la corrida · ${tc ? fmt(tc, 2) : '—'}`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400 mt-2 italic">
+            El precio en pesos es el de mercado y no cambia: lo único que cambia es el dólar con el que se mide.
+            Aplica a toda la pantalla — tabla, totales, informes y participaciones.
+          </p>
+        </div>
+
         {aplicarExp && (
           <p className="text-xs text-gray-400 mt-2 italic">
             Las tasas de instrumentos CER incluyen la inflación esperada, y las de instrumentos en dólares/dólar-linked la devaluación esperada, para expresarlas en una base nominal en pesos comparable. Es una perspectiva estimada, no un dato de mercado.
@@ -448,7 +532,7 @@ export default function Reportes() {
             <p className="text-sm text-gray-500">
               Emitido: {new Date().toLocaleDateString('es-AR')}
               {fechaCierre && ` · Cotizaciones al ${new Date(String(fechaCierre).split('T')[0] + 'T12:00:00').toLocaleDateString('es-AR')}`}
-              {tc && ` · TC ${fmt(tc, 2)}`}
+              {tcExpo ? ` · Dólar manual: ${fmt(tcExpo, 2)}` : (tc ? ` · Dólar de la corrida: ${fmt(tc, 2)}` : '')}
               {cer && ` · CER ${fmt(cer.valor, 4)}`}
             </p>
             {aplicarExp && (
