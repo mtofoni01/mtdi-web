@@ -368,6 +368,11 @@ export default function Cartera() {
   const [posiciones, setPosiciones] = useState([])
   const [resumen, setResumen]       = useState(null)
   const [cargando, setCargando]     = useState(true)
+
+  // ── Fecha de corte: vacío = hoy (estado actual de la tabla posiciones).
+  //    Con fecha, el backend reconstruye el VN desde las operaciones y toma
+  //    el precio vigente a esa fecha.
+  const [fechaCorte, setFechaCorte] = useState('')
   const [sortCol, setSortCol]       = useState('ticker')
   const [sortDir, setSortDir]       = useState('asc')
   const [seleccionado, setSeleccionado] = useState(null)
@@ -394,7 +399,10 @@ export default function Cartera() {
     setCargando(true)
     try {
       const esAdmin = usuario?.rol === 'admin'
-      const url = esAdmin ? '/api/cartera/posiciones?todos=true' : '/api/cartera/posiciones'
+      const qs = new URLSearchParams()
+      if (esAdmin) qs.set('todos', 'true')
+      if (fechaCorte) qs.set('fecha', fechaCorte)
+      const url = `/api/cartera/posiciones${qs.toString() ? '?' + qs : ''}`
       const res  = await authFetch(url)
       const data = await res.json()
       const items = data.data || []
@@ -408,13 +416,13 @@ export default function Cartera() {
 
       // Cargar el TC de valuación
       try {
-        const rD = await authFetch('/api/cartera/dolar')
+        const rD = await authFetch(`/api/cartera/dolar${fechaCorte ? `?fecha=${fechaCorte}` : ''}`)
         const dD = await rD.json()
         if (dD.ok && dD.data) setDolar(dD.data)
       } catch {}
     } catch {}
     finally { setCargando(false) }
-  }, [authFetch, usuario])
+  }, [authFetch, usuario, fechaCorte])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -567,7 +575,18 @@ export default function Cartera() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">📈 Mi cartera</h1>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          {/* Fecha de corte: vacío = hoy */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 uppercase">Al</label>
+            <input type="date" value={fechaCorte}
+              onChange={e => setFechaCorte(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-400" />
+            {fechaCorte && (
+              <button onClick={() => setFechaCorte('')}
+                className="text-xs text-indigo-600 hover:underline">hoy</button>
+            )}
+          </div>
           <button
             onClick={() => setMostrarInformes(v => !v)}
             className={`px-4 py-2 text-sm rounded-lg border transition-colors ${mostrarInformes ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-gray-200 hover:bg-gray-50'}`}
@@ -644,7 +663,21 @@ export default function Cartera() {
       <div className="flex gap-6">
         {/* Tabla */}
         <div className="flex-1 bg-white rounded-xl border border-gray-100 overflow-hidden">
-          {cargando ? (
+    
+      {fechaCorte && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 flex items-center justify-between">
+          <span className="text-sm text-amber-800">
+            📅 Cartera reconstruida al <strong>{fechaCorte.split('-').reverse().join('/')}</strong> —
+            no es la posición actual. El VN sale de las operaciones hasta esa fecha y el precio es el vigente a ese día.
+          </span>
+          <button onClick={() => setFechaCorte('')}
+            className="text-sm font-semibold text-amber-700 hover:underline whitespace-nowrap ml-4">
+            Ver hoy
+          </button>
+        </div>
+      )}
+
+      {cargando ? (
             <div className="flex justify-center py-16">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"/>
             </div>
