@@ -41,7 +41,8 @@ export default function Saldo() {
   // Egresos (restan) e ingresos (suman) con sus labels
   const EGRESOS = [
     { key: 'inversiones',  label: '📉 Inversiones',           desc: 'Compras de títulos y suscripciones FCI' },
-    { key: 'colocaciones', label: '🔒 Colocaciones',          desc: 'Depósitos a plazo y a la vista' },
+    { key: 'colocaciones', label: '🔒 Colocaciones a plazo',   desc: 'Plazos fijos y cauciones' },
+    { key: 'cuentas_vista',label: '🏦 Cuentas a la vista',     desc: 'Saldos depositados en cuentas bancarias' },
     { key: 'comisiones',   label: '💹 Comisiones',            desc: 'Comisiones de operaciones' },
     { key: 'gastos',       label: '💸 Gastos',                desc: 'Gastos imputados' },
     { key: 'retiros',      label: '⬇️ Retiros de capital',     desc: 'Retiros al exterior' },

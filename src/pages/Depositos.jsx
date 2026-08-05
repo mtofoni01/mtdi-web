@@ -36,6 +36,10 @@ export default function Depositos() {
   const [mensaje, setMensaje]       = useState(null)
   const [mostrarForm, setMostrarForm] = useState(false)
 
+  // Vencidos SIN cobrar se muestran siempre (son plata esperando conciliación).
+  // Los cobrados son historia: ocultos salvo que se pidan.
+  const [verCobrados, setVerCobrados] = useState(false)
+
   // Modo: plazo_fijo | caucion
   const [modo, setModo] = useState('plazo_fijo')
 
@@ -63,7 +67,10 @@ export default function Depositos() {
   const cargar = useCallback(async () => {
     setCargando(true)
     try {
-      const params = esAdmin ? '?todos=true' : ''
+      const qs = new URLSearchParams()
+      if (esAdmin) qs.set('todos', 'true')
+      if (verCobrados) qs.set('incluir_cobrados', 'true')
+      const params = qs.toString() ? `?${qs}` : ''
       const [rDep, rEsp, rCust] = await Promise.all([
         authFetch(`/api/cartera/depositos${params}`),
         authFetch('/api/cartera/especies'),
@@ -82,7 +89,7 @@ export default function Depositos() {
       }
     } catch {}
     finally { setCargando(false) }
-  }, [authFetch, esAdmin])
+  }, [authFetch, esAdmin, verCobrados])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -195,7 +202,14 @@ export default function Depositos() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">🏦 Depósitos a Plazo</h1>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
+          {/* Los vencidos SIN cobrar se ven siempre: son plata esperando
+              conciliación. Los cobrados son historia y se piden aparte. */}
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input type="checkbox" checked={verCobrados}
+              onChange={e => setVerCobrados(e.target.checked)} />
+            Ver también los cobrados
+          </label>
           <button onClick={cargar} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">↻</button>
           <button onClick={() => setMostrarForm(v => !v)}
             className="px-4 py-2 text-sm text-white rounded-lg" style={{ backgroundColor: '#4F6EF7' }}>
@@ -384,7 +398,7 @@ export default function Depositos() {
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"/></div>
       ) : depositos.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-100 p-12 text-center text-gray-400">
-          No hay depósitos activos
+          No hay depósitos {verCobrados ? '' : 'vigentes'}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
@@ -413,7 +427,11 @@ export default function Depositos() {
                       <td className="px-3 py-3 text-xs text-gray-400">{fmtFecha(d.fecha_inicio)}</td>
                       <td className="px-3 py-3 text-xs text-gray-400">{fmtFecha(d.fecha_vto)}</td>
                       <td className="px-3 py-3 text-sm">
-                        {d.vencido ? <span className="text-red-500 font-semibold">Vencido</span> : `${plazoRest} días`}
+                        {d.vencido ? (
+                          <span className="text-red-600 font-semibold" title="Vencido y todavía sin cobrar: hay que conciliar el pago">
+                            ⚠️ Vencido{d.dias_vencido > 0 ? ` hace ${d.dias_vencido} d` : ''}
+                          </span>
+                        ) : `${plazoRest} días`}
                       </td>
                       <td className="px-3 py-3 text-sm text-green-600">{d.moneda} {fmt(d.interes_devengado)}</td>
                       <td className="px-3 py-3 text-sm font-semibold">{d.moneda} {fmt(d.valor_actual)}</td>
